@@ -159,6 +159,61 @@ class FSShell():
     self.FileObject.RawBlocks.DumpToDisk(dumpfilename)
     return 0
 
+  # Returns inode_num created
+  def mkdir(self, dirname):
+    i, errorcode = self.FileObject.Create(self.cwd, dirname, INODE_TYPE_DIR)
+    if i == -1:
+      print ("Error: " + errorcode)
+      return -1
+    print(errorcode, f"Created dir: {dirname}")
+    return 0
+
+  # Returns inode_num created
+  def create(self, filename):
+    i, errorcode = self.FileObject.Create(self.cwd, filename, INODE_TYPE_FILE)
+    if i == -1:
+      print ("Error: " + errorcode)
+      return -1
+    print(errorcode, f"Created file: {filename}")
+    return 0
+
+  # Returns bytes_written
+  def append(self, filename, s):
+    i = self.FileObject.Lookup(filename, self.cwd)
+    if i == -1:
+      print ("Error: not found\n")
+      return -1
+
+    d = bytearray(s, "utf-8")
+
+    inobj = InodeNumber(self.FileObject.RawBlocks,i)
+    inobj.InodeNumberToInode()
+    if inobj.inode.type != INODE_TYPE_FILE:
+      print ("Error: not a file\n")
+      return -1
+
+    # Increase size
+    offset = inobj.inode.size
+    if inobj.inode.size + len(d) <= MAX_FILE_SIZE:
+      inobj.inode.size += len(d)
+    else:
+      print('Exceeds MAX File Size')
+      return -1
+
+    data, errorcode = self.FileObject.Write(i, offset, d)
+    if data == -1:
+      print ("Error: " + errorcode)
+      return -1
+    print(f"Successfully appended {len(s)} bytes.")
+    return 0
+
+  def rm(self, filename):
+    i, errorcode = self.FileObject.Unlink(self.cwd, filename)
+    if i == -1:
+      print ("Error: " + errorcode)
+      return -1
+    return 0
+
   def Interpreter(self):
     while (True):
       command = input("[cwd=" + str(self.cwd) + "]%")
@@ -209,6 +264,29 @@ class FSShell():
           self.save(splitcmd[1])
       elif splitcmd[0] == "exit":
         return
+
+      # HW2
+      elif splitcmd[0] == "mkdir":
+        if len(splitcmd) != 2:
+          print ("Error: mkdir requires 1 argument")
+        else:
+          self.mkdir(splitcmd[1])
+      elif splitcmd[0] == "create":
+        if len(splitcmd) != 2:
+          print ("Error: create requires 1 argument")
+        else:
+          self.create(splitcmd[1])
+      elif splitcmd[0] == "append":
+        if len(splitcmd) != 3:
+          print ("Error: create requires 2 arguments")
+        else:
+          self.append(splitcmd[1], splitcmd[2])
+      elif splitcmd[0] == "rm":
+        if len(splitcmd) != 2:
+          print ("Error: create requires 1 argument")
+        else:
+          self.rm(splitcmd[1])
+          
       else:
         print ("command " + splitcmd[0] + " not valid.\n")
 
