@@ -1,4 +1,4 @@
-import pickle, logging 
+import pickle, logging, math
 
 ##### File system constants
 
@@ -676,7 +676,7 @@ class FileName():
     return inode_number.inode.size
 
 
-## Allocate a data block, update free bitmap, and return its number
+  ## Allocate a data block, update free bitmap, and return its number
 
   def AllocateDataBlock(self):
 
@@ -703,6 +703,19 @@ class FileName():
     logging.debug ('AllocateDataBlock: no free data blocks available')
     quit()
 
+    ## Deallocates block in bitmap by number
+  def DeallocateDataBlock(self, block_num):
+
+    logging.debug ('DeallocateDataBlock: ')
+
+    # GET() raw block that stores the bitmap entry for block_number
+    bitmap_block = FREEBITMAP_BLOCK_OFFSET + (block_number // BLOCK_SIZE)
+    block = self.RawBlocks.Get(bitmap_block)
+
+    # Locate proper byte within the block
+    byte_bitmap = block[block_number % BLOCK_SIZE] = 0
+    logging.debug ('DeallocatedDataBlock: ' + str(block_number))
+    return
 
 ## Initializes the root inode
 
@@ -963,4 +976,88 @@ class FileName():
 
     return read_block, "SUCCESS"
 
+  def Unlink(self, dir, name):
+    # Ensure "dir" corresponds to a valid directory
+    # if not, return an error ERROR_UNLINK_INVALID_DIR
+    dir_inode = InodeNumber(self.RawBlocks, dir)
+    dir_inode.InodeNumberToInode()
 
+    if dir_inode.inode.type != INODE_TYPE_DIR:
+      logging.debug ("ERROR_UNLINK_INVALID_DIR " + str(dir))
+      return -1, "ERROR_UNLINK_INVALID_DIR"
+
+    # Ensure "name" exists in the directory
+    # if not, return an error ERROR_UNLINK_DOESNOT_EXIST
+    file_inode_num = self.Lookup(name, dir)
+    if file_inode_num == -1:
+      return -1, "ERROR_UNLINK_DOESNOT_EXIST"
+
+    # get inode for file  
+    file_inode = InodeNumber(self.RawBlocks, file_inode_num)
+    file_inode.InodeNumberToInode()
+
+    # Ensure "name" refers to a file of type INODE_TYPE_FILE
+    # if not, return error ERROR_UNLINK_NOT_FILE
+    if file_inode.inode.type != INODE_TYPE_FILE:
+      return -1, "ERROR_UNLINK_NOT_FILE"
+
+    #  Decrement the refcnt of the file that is being unlinked
+    file_inode.inode.refcnt -= 1
+
+    # e) Remove the (name,inode) binding for this file in dir
+    # offset = 0
+    # scanned = 0
+
+    # # Iterate over all data blocks indexed by directory inode, until we reach inode's size
+    # while offset < dir_inode.inode.size:
+
+    #   # Retrieve directory data block given current offset
+    #   b = dir_inode.InodeNumberToBlock(offset)
+
+    #   # A directory data block has multiple (filename,inode) entries 
+    #   # Iterate over file entries to search for matches
+    #   for i in range (0, FILE_ENTRIES_PER_DATA_BLOCK):
+
+    #     # don't search beyond file size
+    #     if dir_inode.inode.size > scanned:
+
+    #       scanned += FILE_NAME_DIRENTRY_SIZE
+ 
+    #       # Extract padded MAX_FILENAME string as a bytearray from data block for comparison
+    #       filestring = self.HelperGetFilenameString(b,i)
+
+    #       logging.debug ("Lookup for " + name + " in " + str(dir) + ": searching string " + str(filestring))
+
+    #       # Pad filename with zeroes and make it a byte array
+    #       padded_filename = bytearray(name,"utf-8")
+    #       padded_filename = bytearray(padded_filename.ljust(MAX_FILENAME,b'\x00'))
+
+    #       # these are now two byte arrays of the same MAX_FILENAME size, ready for comparison 
+    #       if filestring == padded_filename:
+
+    #         # On a match, shift down
+    #         block[:dir_inode.inode.size-] = 
+
+
+    #   # Skip to the next block, back to while loop
+    #   offset += BLOCK_SIZE
+
+
+    
+    #FIXME does this need to deallocate block if goes under size
+    # does this need to move all other entries up
+    dir_inode.inode.size -= FILE_NAME_DIRENTRY_SIZE
+    
+    # f) Decrement the refcnt for the directory dir
+    dir_inode.inode.refcnt -= 1
+    
+    # g) If the file's refcnt drops to zero:
+    if file_inode.inode.refcnt == 0:
+      # g.1) Free up the file's blocks (setting the proper byte(s) to 0 in the free block bitmap)
+      for i in range(math.ceil(file_inode.inode.size / BLOCK_SIZE)):
+        self.DeallocateDataBlock(file_inode.inode.block_numbers[i])
+      # g.2) Free up the inode (setting the inode to be INODE_TYPE_INVALID)
+      file_inode.inode.type = INODE_TYPE_INVALID
+      return
+
+    return 0, "SUCCESS"
