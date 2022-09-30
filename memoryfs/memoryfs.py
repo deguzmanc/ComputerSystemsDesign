@@ -705,9 +705,6 @@ class FileName():
 
     ## Deallocates block in bitmap by number
   def DeallocateDataBlock(self, block_num):
-
-    print (f'DeallocateDataBlock: {block_num}')
-
     # GET() raw block that stores the bitmap entry for block_number
     bitmap_block = FREEBITMAP_BLOCK_OFFSET + (block_num // BLOCK_SIZE)
     block = self.RawBlocks.Get(bitmap_block)
@@ -1006,6 +1003,46 @@ class FileName():
     file_inode.StoreInode()
 
     # e) Remove the (name,inode) binding for this file in dir
+    ind_last_entry = dir_inode.inode.size - FILE_NAME_DIRENTRY_SIZE
+    block_last_entry = dir_inode.InodeNumberToBlock(ind_last_entry)
+    last_entry = block_last_entry[ind_last_entry % BLOCK_SIZE:(ind_last_entry+FILE_NAME_DIRENTRY_SIZE) % BLOCK_SIZE]
+    block_last_entry[ind_last_entry % BLOCK_SIZE:(ind_last_entry+FILE_NAME_DIRENTRY_SIZE) % BLOCK_SIZE] = b'\x00' * FILE_NAME_DIRENTRY_SIZE
+    
+    offset = 0
+    scanned = 0
+
+    # Iterate over all data blocks indexed by directory inode, until we reach inode's size
+    while offset < dir_inode.inode.size:
+
+      # Retrieve directory data block given current offset
+      b = dir_inode.InodeNumberToBlock(offset)
+
+      # A directory data block has multiple (filename,inode) entries 
+      # Iterate over file entries to search for matches
+      for i in range (0, FILE_ENTRIES_PER_DATA_BLOCK):
+
+        # don't search beyond file size
+        if dir_inode.inode.size > scanned:
+
+          scanned += FILE_NAME_DIRENTRY_SIZE
+
+          # Extract padded MAX_FILENAME string as a bytearray from data block for comparison
+          filestring = self.HelperGetFilenameString(b,i)
+
+          logging.debug ("Lookup for " + name + " in " + str(dir) + ": searching string " + str(filestring))
+
+          # Pad filename with zeroes and make it a byte array
+          padded_filename = bytearray(name,"utf-8")
+          padded_filename = bytearray(padded_filename.ljust(MAX_FILENAME,b'\x00'))
+
+          # these are now two byte arrays of the same MAX_FILENAME size, ready for comparison 
+          if filestring == padded_filename:
+            b[i*FILE_NAME_DIRENTRY_SIZE:(i+1)*FILE_NAME_DIRENTRY_SIZE] = last_entry
+            break
+
+      # Skip to the next block, back to while loop
+      offset += BLOCK_SIZE
+    '''
     offset = 0
     scanned = 0
     previous_block = None # set after finding FILE_NAME_ENTRY
@@ -1039,26 +1076,24 @@ class FileName():
             if filestring == padded_filename:
               if i != (FILE_ENTRIES_PER_DATA_BLOCK - 1): # shift down last
                 b[i*FILE_NAME_DIRENTRY_SIZE:-1*FILE_NAME_DIRENTRY_SIZE] = b[(i+1)*FILE_NAME_DIRENTRY_SIZE:] # shift down
-                # print(f'replacing: {b[i*FILE_NAME_DIRENTRY_SIZE:-1*FILE_NAME_DIRENTRY_SIZE].decode()} | {b[(i+1)*FILE_NAME_DIRENTRY_SIZE:].decode()}')
               previous_block = b
               break
       else:
-        # print(b.decode(), previous_block.decode(), 'dadada')
         previous_block[-1*FILE_NAME_DIRENTRY_SIZE:] = b[:FILE_NAME_DIRENTRY_SIZE]
         b[:-1*FILE_NAME_DIRENTRY_SIZE] = b[FILE_NAME_DIRENTRY_SIZE:] # shift down (handles zeroing last)
-        # print(f'replacing: {b[:-1*FILE_NAME_DIRENTRY_SIZE].decode()} = {b[FILE_NAME_DIRENTRY_SIZE:].decode()}')
 
       # Skip to the next block, back to while loop
       offset += BLOCK_SIZE
+    '''
 
     # decrement size
     dir_inode.inode.size -= FILE_NAME_DIRENTRY_SIZE
     dir_inode.StoreInode()
 
     # deallocate block if goes under to next block size
-    if dir_inode.inode.size % BLOCK_SIZE == 0:
-      self.DeallocateDataBlock(dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE])
-      dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE] = 0 # zero just in case
+    # if dir_inode.inode.size % BLOCK_SIZE == 0:
+    #   self.DeallocateDataBlock(dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE])
+    #   dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE] = 0 # zero just in case
     
     # f) Decrement the refcnt for the directory dir
     dir_inode.inode.refcnt -= 1
@@ -1071,5 +1106,6 @@ class FileName():
         self.DeallocateDataBlock(file_inode.inode.block_numbers[i])
       # g.2) Free up the inode (setting the inode to be INODE_TYPE_INVALID)
       file_inode.inode.type = INODE_TYPE_INVALID
+      file_inode.StoreInode()
 
     return 0, "SUCCESS"

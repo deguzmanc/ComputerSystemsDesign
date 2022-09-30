@@ -165,7 +165,6 @@ class FSShell():
     if i == -1:
       print ("Error: " + errorcode)
       return -1
-    print(errorcode, f"Created dir: {dirname}")
     return 0
 
   # Returns inode_num created
@@ -174,7 +173,6 @@ class FSShell():
     if i == -1:
       print ("Error: " + errorcode)
       return -1
-    print(errorcode, f"Created file: {filename}")
     return 0
 
   # Returns bytes_written
