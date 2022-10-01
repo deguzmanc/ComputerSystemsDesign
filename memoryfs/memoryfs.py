@@ -1,3 +1,4 @@
+from ctypes.wintypes import tagRECT
 import pickle, logging 
 
 ##### File system constants
@@ -732,7 +733,7 @@ class FileName():
     logging.debug ("Create: dir: " + str(dir) + ", name: " + str(name) + ", type: " + str(type))
 
     # Ensure type is valid
-    if not (type == INODE_TYPE_FILE or type == INODE_TYPE_DIR):
+    if type == INODE_TYPE_INVALID:
       logging.debug ("ERROR_CREATE_INVALID_TYPE " + str(type))
       return -1, "ERROR_CREATE_INVALID_TYPE"
 
@@ -795,6 +796,23 @@ class FileName():
       newfile_inode.inode.refcnt = 1
       # New files are not allocated any blocks; these are allocated on a Write()
       newfile_inode.StoreInode()
+
+      # Add to parent's (filename,inode) table
+      self.InsertFilenameInodeNumber(dir_inode, name, inode_position) 
+    
+      # Update directory inode
+      # refcnt incremented by one
+      dir_inode.inode.refcnt += 1
+      dir_inode.StoreInode()
+    
+    elif type == INODE_TYPE_SYM:
+      newsym_inode = InodeNumber(self.RawBlocks, inode_position)
+      newsym_inode.InodeNumberToInode()
+      newsym_inode.inode.type = INODE_TYPE_SYM
+      newsym_inode.inode.size = 0
+      newsym_inode.inode.refcnt = 1
+      # New files are not allocated any blocks; these are allocated on a Write()
+      newsym_inode.StoreInode()
 
       # Add to parent's (filename,inode) table
       self.InsertFilenameInodeNumber(dir_inode, name, inode_position) 
@@ -1121,3 +1139,74 @@ class FileName():
     else:
       return self.PathToInodeNumber(path,cwd)
 
+  def Link(self, target, name, cwd):
+    '''Creates a "hard" link in the context of current working directory with inode number "cwd".
+     "name" is a string describing the name of the link, and "target" is a string describing the path to the target.'''
+    
+    dir_inode = InodeNumber(self.RawBlocks, cwd)
+    dir_inode.InodeNumberToInode()
+    if dir_inode.inode.type != INODE_TYPE_DIR:
+      return -1, "ERROR_LINK_NOT_DIRECTORY"
+    
+    if dir_inode.inode.size == MAX_FILE_SIZE:
+      return -1, "ERROR_LINK_DATA_BLOCK_NOT_AVAILABLE"
+
+    target_inode_num = self.PathToInodeNumber(target, cwd)
+    if target_inode_num == -1:
+      return -1, "ERROR_LINK_TARGET_DOESNOT_EXIST"
+
+    target_inode = InodeNumber(self.RawBlocks, target_inode_num)
+    target_inode.InodeNumberToInode()
+    if target_inode.inode.type != INODE_TYPE_FILE:
+      return -1, "ERROR_LINK_TARGET_NOT_FILE"
+
+    if self.Lookup(name, cwd) != -1:
+      return -1, "ERROR_LINK_ALREADY_EXISTS"
+
+    self.InsertFilenameInodeNumber(dir_inode, name, target_inode_num)
+    target_inode.inode.refcnt += 1
+    target_inode.StoreInode()
+
+    return 0, "SUCCESS"
+  
+  def Symlink(self, target, name, cwd):
+    '''Creates a "soft" link in the context of current working directory with inode number "cwd".
+    "name" is a string describing the name of the link, and "target" is a string describing the path to the target.'''
+    dir_inode = InodeNumber(self.RawBlocks, cwd)
+    dir_inode.InodeNumberToInode()
+    if dir_inode.inode.type != INODE_TYPE_DIR:
+      return -1, "ERROR_SYMLINK_NOT_DIRECTORY"
+    
+    if dir_inode.inode.size == MAX_FILE_SIZE:
+      return -1, "ERROR_SYMLINK_DATA_BLOCK_NOT_AVAILABLE"
+
+    target_inode_num = self.PathToInodeNumber(target, cwd)
+    if target_inode_num == -1:
+      return -1, "ERROR_SYMLINK_TARGET_DOESNOT_EXIST"
+    
+    if self.Lookup(name, cwd) != -1:
+      return -1, "ERROR_SYMLINK_ALREADY_EXISTS"
+
+    if len(target) > BLOCK_SIZE:
+      return -1, "ERROR_SYMLINK_TARGET_EXCEEDS_BLOCK_SIZE"
+
+    sym_inode_num, e = self.Create(cwd, name, INODE_TYPE_SYM)
+    if sym_inode_num == -1:
+      return -1, "ERROR_SYMLINK_INODE_NOT_AVAILABLE"
+
+    # store the target string in the first data block (only)
+    # referenced by the inode - i.e. symlink_inode.inode.block_numbers[0]
+    sym_inode = InodeNumber(self.RawBlocks, sym_inode_num)
+    sym_inode.InodeNumberToInode()
+    sym_inode.inode.block_numbers[0] = self.AllocateDataBlock()
+    sym_inode.inode.size = len(target)
+    sym_inode.StoreInode()
+
+    block = self.RawBlocks.Get(sym_inode.inode.block_numbers[0])
+    stringbyte = bytearray(target,"utf-8")
+    block[0:len(target)] = stringbyte
+    self.RawBlocks.Put(sym_inode.inode.block_numbers[0], block)
+    
+    self.InsertFilenameInodeNumber(dir_inode, name, sym_inode_num)
+
+    return 0, "SUCCESS"

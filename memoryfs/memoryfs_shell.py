@@ -48,8 +48,10 @@ class FSShell():
         inobj2.InodeNumberToInode()
         if inobj2.inode.type == INODE_TYPE_DIR:
           print ("[" + str(inobj2.inode.refcnt) + "]:" + entryname.decode() + "/")
-        else:
+        elif inobj2.inode.type == INODE_TYPE_FILE:
             print ("[" + str(inobj2.inode.refcnt) + "]:" + entryname.decode())
+        elif inobj2.inode.type == INODE_TYPE_SYM:
+            print ("[" + str(inobj2.inode.refcnt) + "]:" + f"{entryname.decode()}@ -> {self.FileObject.RawBlocks.Get(inobj2.inode.block_numbers[0]).decode()}")
         current_position += FILE_NAME_DIRENTRY_SIZE
       block_index += 1
     return 0
@@ -208,7 +210,21 @@ class FSShell():
     print ("Successfully appended " + str(written) + " bytes.")
     return 0
 
+  def lnh(self, target, name):
+    '''Shell command that calls Link() with the shell's cwd'''
+    i, errorcode = self.FileObject.Link(target, name, self.cwd)
+    if i == -1:
+      print ("Error: " + errorcode + "\n")
+      return -1
+    return 0
 
+  def lns(self, target, name):
+    '''Shell command that calls Symlink() with the shell's cwd'''
+    i, errorcode = self.FileObject.Symlink(target, name, self.cwd)
+    if i == -1:
+      print ("Error: " + errorcode + "\n")
+      return -1
+    return 0
 
   def Interpreter(self):
     while (True):
@@ -278,6 +294,16 @@ class FSShell():
           print ("Error: append requires two arguments")
         else:
           self.append(splitcmd[1],splitcmd[2])
+      elif splitcmd[0] == "lnh":
+        if len(splitcmd) != 3:
+          print ("Error: lnh requires two arguments")
+        else:
+          self.lnh(splitcmd[1],splitcmd[2])
+      elif splitcmd[0] == "lns":
+        if len(splitcmd) != 3:
+          print ("Error: lns requires two arguments")
+        else:
+          self.lns(splitcmd[1],splitcmd[2])
       elif splitcmd[0] == "exit":
         return
       else:
