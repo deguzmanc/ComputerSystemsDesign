@@ -1151,7 +1151,7 @@ class FileName():
     if dir_inode.inode.size == MAX_FILE_SIZE:
       return -1, "ERROR_LINK_DATA_BLOCK_NOT_AVAILABLE"
 
-    target_inode_num = self.PathToInodeNumber(target, cwd)
+    target_inode_num = self.GeneralPathToInodeNumber(target, cwd)
     if target_inode_num == -1:
       return -1, "ERROR_LINK_TARGET_DOESNOT_EXIST"
 
@@ -1182,7 +1182,7 @@ class FileName():
     if dir_inode.inode.size == MAX_FILE_SIZE:
       return -1, "ERROR_SYMLINK_DATA_BLOCK_NOT_AVAILABLE"
 
-    target_inode_num = self.PathToInodeNumber(target, cwd)
+    target_inode_num = self.GeneralPathToInodeNumber(target, cwd)
     if target_inode_num == -1:
       return -1, "ERROR_SYMLINK_TARGET_DOESNOT_EXIST"
     
