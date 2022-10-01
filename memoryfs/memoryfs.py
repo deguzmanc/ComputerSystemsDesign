@@ -1166,6 +1166,8 @@ class FileName():
     self.InsertFilenameInodeNumber(dir_inode, name, target_inode_num)
     target_inode.inode.refcnt += 1
     target_inode.StoreInode()
+    dir_inode.inode.refcnt += 1
+    dir_inode.StoreInode()
 
     return 0, "SUCCESS"
   
