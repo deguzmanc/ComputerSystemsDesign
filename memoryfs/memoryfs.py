@@ -1,4 +1,5 @@
-import pickle, logging, math
+from ctypes.wintypes import tagRECT
+import pickle, logging 
 
 ##### File system constants
 
@@ -676,7 +677,7 @@ class FileName():
     return inode_number.inode.size
 
 
-  ## Allocate a data block, update free bitmap, and return its number
+## Allocate a data block, update free bitmap, and return its number
 
   def AllocateDataBlock(self):
 
@@ -703,16 +704,6 @@ class FileName():
     logging.debug ('AllocateDataBlock: no free data blocks available')
     quit()
 
-    ## Deallocates block in bitmap by number
-  def DeallocateDataBlock(self, block_num):
-    # GET() raw block that stores the bitmap entry for block_number
-    bitmap_block = FREEBITMAP_BLOCK_OFFSET + (block_num // BLOCK_SIZE)
-    block = self.RawBlocks.Get(bitmap_block)
-
-    # Locate proper byte within the block
-    block[block_num % BLOCK_SIZE] = 0
-    logging.debug ('DeallocatedDataBlock: ' + str(block_num))
-    return
 
 ## Initializes the root inode
 
@@ -742,7 +733,7 @@ class FileName():
     logging.debug ("Create: dir: " + str(dir) + ", name: " + str(name) + ", type: " + str(type))
 
     # Ensure type is valid
-    if not (type == INODE_TYPE_FILE or type == INODE_TYPE_DIR):
+    if type == INODE_TYPE_INVALID:
       logging.debug ("ERROR_CREATE_INVALID_TYPE " + str(type))
       return -1, "ERROR_CREATE_INVALID_TYPE"
 
@@ -805,6 +796,23 @@ class FileName():
       newfile_inode.inode.refcnt = 1
       # New files are not allocated any blocks; these are allocated on a Write()
       newfile_inode.StoreInode()
+
+      # Add to parent's (filename,inode) table
+      self.InsertFilenameInodeNumber(dir_inode, name, inode_position) 
+    
+      # Update directory inode
+      # refcnt incremented by one
+      dir_inode.inode.refcnt += 1
+      dir_inode.StoreInode()
+    
+    elif type == INODE_TYPE_SYM:
+      newsym_inode = InodeNumber(self.RawBlocks, inode_position)
+      newsym_inode.InodeNumberToInode()
+      newsym_inode.inode.type = INODE_TYPE_SYM
+      newsym_inode.inode.size = 0
+      newsym_inode.inode.refcnt = 1
+      # New files are not allocated any blocks; these are allocated on a Write()
+      newsym_inode.StoreInode()
 
       # Add to parent's (filename,inode) table
       self.InsertFilenameInodeNumber(dir_inode, name, inode_position) 
@@ -973,139 +981,234 @@ class FileName():
 
     return read_block, "SUCCESS"
 
+
+## Unlink a file 
+## dir is the inode number of current working directory 
+## name is the file's name
+
   def Unlink(self, dir, name):
-    # Ensure "dir" corresponds to a valid directory
-    # if not, return an error ERROR_UNLINK_INVALID_DIR
+
+    logging.debug ("Unlink: dir: " + str(dir) + ", name: " + str(name))
+
+    # Obtain dir_inode_number_inode, ensure it is a directory
     dir_inode = InodeNumber(self.RawBlocks, dir)
     dir_inode.InodeNumberToInode()
-
     if dir_inode.inode.type != INODE_TYPE_DIR:
       logging.debug ("ERROR_UNLINK_INVALID_DIR " + str(dir))
       return -1, "ERROR_UNLINK_INVALID_DIR"
 
-    # Ensure "name" exists in the directory
-    # if not, return an error ERROR_UNLINK_DOESNOT_EXIST
-    file_inode_num = self.Lookup(name, dir)
-    if file_inode_num == -1:
+    # Ensure file exists - if Lookup returns -1 it does not exist
+    file_inode = self.Lookup(name, dir)
+    if file_inode == -1:
+      logging.debug ("ERROR_UNLINK_DOESNOT_EXIST " + str(name))
       return -1, "ERROR_UNLINK_DOESNOT_EXIST"
 
-    # get inode for file  
-    file_inode = InodeNumber(self.RawBlocks, file_inode_num)
-    file_inode.InodeNumberToInode()
-
-    # Ensure "name" refers to a file of type INODE_TYPE_FILE
-    # if not, return error ERROR_UNLINK_NOT_FILE
-    if file_inode.inode.type != INODE_TYPE_FILE:
+    # Ensure it is a regular file or symlink
+    file = InodeNumber(self.RawBlocks, file_inode)
+    file.InodeNumberToInode()
+    # if file.inode.type != INODE_TYPE_FILE:
+    if file.inode.type == INODE_TYPE_DIR:
+      logging.debug ("ERROR_UNLINK_NOT_FILE " + str(name))
       return -1, "ERROR_UNLINK_NOT_FILE"
 
-    #  Decrement the refcnt of the file that is being unlinked
-    file_inode.inode.refcnt -= 1
-    file_inode.StoreInode()
+    # Remove binding of inode in directory
+    # We need to search all directory entries until we find a match with inode number
 
-    # e) Remove the (name,inode) binding for this file in dir
-    ind_last_entry = dir_inode.inode.size - FILE_NAME_DIRENTRY_SIZE
-    block_last_entry = dir_inode.InodeNumberToBlock(ind_last_entry)
-    last_entry = block_last_entry[ind_last_entry % BLOCK_SIZE:(ind_last_entry+FILE_NAME_DIRENTRY_SIZE) % BLOCK_SIZE]
-    block_last_entry[ind_last_entry % BLOCK_SIZE:(ind_last_entry+FILE_NAME_DIRENTRY_SIZE) % BLOCK_SIZE] = b'\x00' * FILE_NAME_DIRENTRY_SIZE
-    
-    offset = 0
-    scanned = 0
-
-    # Iterate over all data blocks indexed by directory inode, until we reach inode's size
-    while offset < dir_inode.inode.size:
-
-      # Retrieve directory data block given current offset
-      b = dir_inode.InodeNumberToBlock(offset)
-
-      # A directory data block has multiple (filename,inode) entries 
-      # Iterate over file entries to search for matches
-      for i in range (0, FILE_ENTRIES_PER_DATA_BLOCK):
-
-        # don't search beyond file size
-        if dir_inode.inode.size > scanned:
-
-          scanned += FILE_NAME_DIRENTRY_SIZE
-
-          # Extract padded MAX_FILENAME string as a bytearray from data block for comparison
-          filestring = self.HelperGetFilenameString(b,i)
-
-          logging.debug ("Lookup for " + name + " in " + str(dir) + ": searching string " + str(filestring))
-
-          # Pad filename with zeroes and make it a byte array
-          padded_filename = bytearray(name,"utf-8")
-          padded_filename = bytearray(padded_filename.ljust(MAX_FILENAME,b'\x00'))
-
-          # these are now two byte arrays of the same MAX_FILENAME size, ready for comparison 
-          if filestring == padded_filename:
-            b[i*FILE_NAME_DIRENTRY_SIZE:(i+1)*FILE_NAME_DIRENTRY_SIZE] = last_entry
-            break
-
-      # Skip to the next block, back to while loop
-      offset += BLOCK_SIZE
-    '''
-    offset = 0
-    scanned = 0
-    previous_block = None # set after finding FILE_NAME_ENTRY
-
-    # Iterate over all data blocks indexed by directory inode, until we reach inode's size
-    while offset < dir_inode.inode.size:
-
-      # Retrieve directory data block given current offset
-      b = dir_inode.InodeNumberToBlock(offset)
-
-      # A directory data block has multiple (filename,inode) entries 
-      # Iterate over file entries to search for matches
-      if previous_block == None:
-        for i in range (0, FILE_ENTRIES_PER_DATA_BLOCK):
-
-          # don't search beyond file size
-          if dir_inode.inode.size > scanned:
-
-            scanned += FILE_NAME_DIRENTRY_SIZE
-  
-            # Extract padded MAX_FILENAME string as a bytearray from data block for comparison
-            filestring = self.HelperGetFilenameString(b,i)
-
-            logging.debug ("Lookup for " + name + " in " + str(dir) + ": searching string " + str(filestring))
-
-            # Pad filename with zeroes and make it a byte array
-            padded_filename = bytearray(name,"utf-8")
-            padded_filename = bytearray(padded_filename.ljust(MAX_FILENAME,b'\x00'))
-
-            # these are now two byte arrays of the same MAX_FILENAME size, ready for comparison 
-            if filestring == padded_filename:
-              if i != (FILE_ENTRIES_PER_DATA_BLOCK - 1): # shift down last
-                b[i*FILE_NAME_DIRENTRY_SIZE:-1*FILE_NAME_DIRENTRY_SIZE] = b[(i+1)*FILE_NAME_DIRENTRY_SIZE:] # shift down
-              previous_block = b
-              break
+    block_index = 0
+    # Scan through all possible blocks in the directory
+    while block_index <= (dir_inode.inode.size // BLOCK_SIZE):
+      # Read block from disk
+      block = self.RawBlocks.Get(dir_inode.inode.block_numbers[block_index])
+      current_position = 0 
+      # can starting from 0, but need to determine where to stop scanning for this block: end_position
+      if block_index == (dir_inode.inode.size // BLOCK_SIZE):
+        # if this is the last block, stop at the inode size boundary
+        end_position = dir_inode.inode.size % BLOCK_SIZE
       else:
-        previous_block[-1*FILE_NAME_DIRENTRY_SIZE:] = b[:FILE_NAME_DIRENTRY_SIZE]
-        b[:-1*FILE_NAME_DIRENTRY_SIZE] = b[FILE_NAME_DIRENTRY_SIZE:] # shift down (handles zeroing last)
+        # otherwise, stop at block boundary
+        end_position = BLOCK_SIZE
 
-      # Skip to the next block, back to while loop
-      offset += BLOCK_SIZE
-    '''
+      # Now scan within the block
+      while current_position < end_position:
+        # Retrieve bytearray slice with name for this binding
+        entryname = block[current_position:current_position+MAX_FILENAME]
+        entryname_padded = bytearray(entryname.ljust(MAX_FILENAME,b'\x00'))
+        padded_filename = bytearray(name,"utf-8")
+        padded_filename = bytearray(padded_filename.ljust(MAX_FILENAME,b'\x00'))
+        if entryname_padded == padded_filename:
+          # found the entry to be removed - inode matches
+          # print("TBD: found entry at " + str(current_position) + " " + str(entryinodenumber) + " " + str(file_inode))
+          # we'll move the entry from the end of the directory list here
+          # index of last block in the directory's list of blocks holds the entry to be moved
+          last_block_index = (dir_inode.inode.size // BLOCK_SIZE)
+          # read last block from disk
+          last_block = self.RawBlocks.Get(dir_inode.inode.block_numbers[last_block_index])
+          last_block_end_position = (dir_inode.inode.size-FILE_NAME_DIRENTRY_SIZE) % BLOCK_SIZE 
+          if (last_block_index == block_index) and (last_block_end_position == current_position):
+            # the entry we're unlinking is the last one already; no need to copy
+            logging.debug ("Unlink: removing last entry from directory")
+            # print ("the entry we're unlinking is the last one already; no need to copy " + str(last_block_index) + ", " + str(block_index) + ", " + str(last_block_end_position) + ", " + str(current_position))
+            # clears the entry out
+            block[current_position:current_position+FILE_NAME_DIRENTRY_SIZE] = bytearray(FILE_NAME_DIRENTRY_SIZE)
+          else:
+            # the entry is not the last - so must copy the last 
+            logging.debug ("Unlink: moving last entry from directory")
+            # print ("the entry is not the last - so must copy the last "  + str(last_block_index) + ", " + str(block_index) + ", " + str(last_block_end_position) + ", " + str(current_position))
+            # copy from last
+            block[current_position:current_position+FILE_NAME_DIRENTRY_SIZE] = last_block[last_block_end_position:last_block_end_position+FILE_NAME_DIRENTRY_SIZE]
+            last_block[last_block_end_position:last_block_end_position+FILE_NAME_DIRENTRY_SIZE] = bytearray(FILE_NAME_DIRENTRY_SIZE)
+            self.RawBlocks.Put(last_block_index,last_block)
+          # write the block back
+          self.RawBlocks.Put(block_index,block)
+          # update inode size
+          dir_inode.inode.size = dir_inode.inode.size - FILE_NAME_DIRENTRY_SIZE
+          # decrement refcnt of directory
+          dir_inode.inode.refcnt -= 1
+          dir_inode.StoreInode()
+          break
+        current_position += FILE_NAME_DIRENTRY_SIZE
+      block_index += 1
 
-    # decrement size
-    dir_inode.inode.size -= FILE_NAME_DIRENTRY_SIZE
+
+    # decrement refcnt
+    file.inode.refcnt -= 1
+    file.StoreInode()
+
+    # Free inode/data block resources if it's the last reference
+    if file.inode.refcnt == 0:
+      logging.debug ("Unlink: last reference; freeing data blocks and inode")
+ 
+      # Free data blocks
+      # Scan all blocks in inode
+      for i in range(0,MAX_INODE_BLOCK_NUMBERS):
+        # if the block is allocated, free it up in bitmap
+        block_number = file.inode.block_numbers[i]
+        if block_number != 0:
+          # print ("TBD: free block " + str(block_number))
+          # index bitmap block
+          bitmap_block = FREEBITMAP_BLOCK_OFFSET + (block_number // BLOCK_SIZE)
+          # retrieve from disk
+          block = self.RawBlocks.Get(bitmap_block)
+          # Update bitmap to be 0 (free)
+          block[block_number % BLOCK_SIZE] = 0
+          # Write back to disk
+          self.RawBlocks.Put(bitmap_block,block)
+
+
+      # Free inode
+      # Create new inode that is blank for the inode number
+      new_blank_inode = InodeNumber(self.RawBlocks, file_inode)
+      # store blank inode to disk
+      new_blank_inode.StoreInode()
+
+    return 0, "SUCCESS"
+
+
+# Resolve a relative path to an inode number
+
+  def PathToInodeNumber(self, path, dir):
+
+    logging.debug ("PathToInodeNumber: path: " + str(path) + ", dir: " + str(dir))
+
+    if "/" in path:
+      split_path = path.split("/")
+      first = split_path[0]
+      del split_path[0]
+      rest = "/".join(split_path)
+      logging.debug ("PathToInodeNumber: first: " + str(first) + ", rest: " + str(rest))
+      d = self.Lookup(first, dir)
+      if d == -1:
+        return -1
+      return self.PathToInodeNumber(rest, d)
+    else:
+      return self.Lookup(path, dir)
+
+# Resolve relative and absolute paths to an inode number
+
+  def GeneralPathToInodeNumber(self, path, cwd):
+
+    logging.debug ("GeneralPathToInodeNumber: path: " + str(path) + ", cwd: " + str(cwd))
+
+    if path[0] == "/":
+      if len(path) == 1: # special case: root
+        logging.debug ("GeneralPathToInodeNumber: returning root inode 0")
+        return 0 
+      cut_path = path[1:len(path)]
+      logging.debug ("GeneralPathToInodeNumber: cut_path: " + str(cut_path))
+      return self.PathToInodeNumber(cut_path,0)
+    else:
+      return self.PathToInodeNumber(path,cwd)
+
+  def Link(self, target, name, cwd):
+    '''Creates a "hard" link in the context of current working directory with inode number "cwd".
+     "name" is a string describing the name of the link, and "target" is a string describing the path to the target.'''
+    
+    dir_inode = InodeNumber(self.RawBlocks, cwd)
+    dir_inode.InodeNumberToInode()
+    if dir_inode.inode.type != INODE_TYPE_DIR:
+      return -1, "ERROR_LINK_NOT_DIRECTORY"
+    
+    if dir_inode.inode.size == MAX_FILE_SIZE:
+      return -1, "ERROR_LINK_DATA_BLOCK_NOT_AVAILABLE"
+
+    target_inode_num = self.GeneralPathToInodeNumber(target, cwd)
+    if target_inode_num == -1:
+      return -1, "ERROR_LINK_TARGET_DOESNOT_EXIST"
+
+    target_inode = InodeNumber(self.RawBlocks, target_inode_num)
+    target_inode.InodeNumberToInode()
+    if target_inode.inode.type != INODE_TYPE_FILE:
+      return -1, "ERROR_LINK_TARGET_NOT_FILE"
+
+    if self.Lookup(name, cwd) != -1:
+      return -1, "ERROR_LINK_ALREADY_EXISTS"
+
+    self.InsertFilenameInodeNumber(dir_inode, name, target_inode_num)
+    target_inode.inode.refcnt += 1
+    target_inode.StoreInode()
+    dir_inode.inode.refcnt += 1
     dir_inode.StoreInode()
 
-    # deallocate block if goes under to next block size
-    # if dir_inode.inode.size % BLOCK_SIZE == 0:
-    #   self.DeallocateDataBlock(dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE])
-    #   dir_inode.inode.block_numbers[dir_inode.inode.size // BLOCK_SIZE] = 0 # zero just in case
+    return 0, "SUCCESS"
+  
+  def Symlink(self, target, name, cwd):
+    '''Creates a "soft" link in the context of current working directory with inode number "cwd".
+    "name" is a string describing the name of the link, and "target" is a string describing the path to the target.'''
+    dir_inode = InodeNumber(self.RawBlocks, cwd)
+    dir_inode.InodeNumberToInode()
+    if dir_inode.inode.type != INODE_TYPE_DIR:
+      return -1, "ERROR_SYMLINK_NOT_DIRECTORY"
     
-    # f) Decrement the refcnt for the directory dir
-    dir_inode.inode.refcnt -= 1
-    dir_inode.StoreInode()
+    if dir_inode.inode.size == MAX_FILE_SIZE:
+      return -1, "ERROR_SYMLINK_DATA_BLOCK_NOT_AVAILABLE"
+
+    target_inode_num = self.GeneralPathToInodeNumber(target, cwd)
+    if target_inode_num == -1:
+      return -1, "ERROR_SYMLINK_TARGET_DOESNOT_EXIST"
     
-    # g) If the file's refcnt drops to zero:
-    if file_inode.inode.refcnt == 0:
-      # g.1) Free up the file's blocks (setting the proper byte(s) to 0 in the free block bitmap)
-      for i in range(math.ceil(file_inode.inode.size / BLOCK_SIZE)):
-        self.DeallocateDataBlock(file_inode.inode.block_numbers[i])
-      # g.2) Free up the inode (setting the inode to be INODE_TYPE_INVALID)
-      file_inode.inode.type = INODE_TYPE_INVALID
-      file_inode.StoreInode()
+    if self.Lookup(name, cwd) != -1:
+      return -1, "ERROR_SYMLINK_ALREADY_EXISTS"
+
+    if len(target) > BLOCK_SIZE:
+      return -1, "ERROR_SYMLINK_TARGET_EXCEEDS_BLOCK_SIZE"
+
+    sym_inode_num, e = self.Create(cwd, name, INODE_TYPE_SYM)
+    if sym_inode_num == -1:
+      return -1, "ERROR_SYMLINK_INODE_NOT_AVAILABLE"
+
+    # store the target string in the first data block (only)
+    # referenced by the inode - i.e. symlink_inode.inode.block_numbers[0]
+    sym_inode = InodeNumber(self.RawBlocks, sym_inode_num)
+    sym_inode.InodeNumberToInode()
+    sym_inode.inode.block_numbers[0] = self.AllocateDataBlock()
+    sym_inode.inode.size = len(target)
+    sym_inode.StoreInode()
+
+    block = self.RawBlocks.Get(sym_inode.inode.block_numbers[0])
+    stringbyte = bytearray(target,"utf-8")
+    block[0:len(target)] = stringbyte
+    self.RawBlocks.Put(sym_inode.inode.block_numbers[0], block)
+    
+    self.InsertFilenameInodeNumber(dir_inode, name, sym_inode_num)
 
     return 0, "SUCCESS"

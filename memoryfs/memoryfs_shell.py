@@ -15,7 +15,9 @@ class FSShell():
 
   # implements cd (change directory)
   def cd(self, dir):
-    i = self.FileObject.Lookup(dir,self.cwd)
+    # i = self.FileObject.Lookup(dir,self.cwd)
+    # now resolve a full path
+    i = self.FileObject.GeneralPathToInodeNumber(dir,self.cwd)
     if i == -1:
       print ("Error: not found\n")
       return -1
@@ -46,15 +48,19 @@ class FSShell():
         inobj2.InodeNumberToInode()
         if inobj2.inode.type == INODE_TYPE_DIR:
           print ("[" + str(inobj2.inode.refcnt) + "]:" + entryname.decode() + "/")
-        else:
-          print ("[" + str(inobj2.inode.refcnt) + "]:" + entryname.decode())
+        elif inobj2.inode.type == INODE_TYPE_FILE:
+            print ("[" + str(inobj2.inode.refcnt) + "]:" + entryname.decode())
+        elif inobj2.inode.type == INODE_TYPE_SYM:
+            print ("[" + str(inobj2.inode.refcnt) + "]:" + f"{entryname.decode()}@ -> {self.FileObject.RawBlocks.Get(inobj2.inode.block_numbers[0]).decode()}")
         current_position += FILE_NAME_DIRENTRY_SIZE
       block_index += 1
     return 0
 
   # implements cat (print file contents)
   def cat(self, filename):
-    i = self.FileObject.Lookup(filename, self.cwd)
+    # i = self.FileObject.Lookup(filename, self.cwd)
+    # Now resolve full path
+    i = self.FileObject.GeneralPathToInodeNumber(filename,self.cwd)
     if i == -1:
       print ("Error: not found\n")
       return -1
@@ -159,56 +165,64 @@ class FSShell():
     self.FileObject.RawBlocks.DumpToDisk(dumpfilename)
     return 0
 
-  # Returns inode_num created
-  def mkdir(self, dirname):
-    i, errorcode = self.FileObject.Create(self.cwd, dirname, INODE_TYPE_DIR)
+
+  # implements mkdir
+  def mkdir(self, dir):
+    i, errorcode = self.FileObject.Create(self.cwd, dir, INODE_TYPE_DIR)
     if i == -1:
-      print ("Error: " + errorcode)
+      print ("Error: " + errorcode + "\n")
       return -1
     return 0
 
-  # Returns inode_num created
-  def create(self, filename):
-    i, errorcode = self.FileObject.Create(self.cwd, filename, INODE_TYPE_FILE)
+  # implements create
+  def create(self, file):
+    i, errorcode = self.FileObject.Create(self.cwd, file, INODE_TYPE_FILE)
     if i == -1:
-      print ("Error: " + errorcode)
+      print ("Error: " + errorcode + "\n")
       return -1
     return 0
 
-  # Returns bytes_written
-  def append(self, filename, s):
-    i = self.FileObject.Lookup(filename, self.cwd)
+  # implements rm
+  def rm(self, file):
+    i, errorcode = self.FileObject.Unlink(self.cwd, file)
+    if i == -1:
+      print ("Error: " + errorcode + "\n")
+      return -1
+    return 0
+
+  # implements append
+  def append(self, filename, string):
+    # i = self.FileObject.Lookup(filename, self.cwd)
+    # Now resolve full path
+    i = self.FileObject.GeneralPathToInodeNumber(filename,self.cwd)
     if i == -1:
       print ("Error: not found\n")
       return -1
-
-    d = bytearray(s, "utf-8")
-
     inobj = InodeNumber(self.FileObject.RawBlocks,i)
     inobj.InodeNumberToInode()
     if inobj.inode.type != INODE_TYPE_FILE:
       print ("Error: not a file\n")
       return -1
-
-    # Increase size
-    offset = inobj.inode.size
-    if inobj.inode.size + len(d) <= MAX_FILE_SIZE:
-      inobj.inode.size += len(d)
-    else:
-      print('Exceeds MAX File Size')
-      return -1
-
-    data, errorcode = self.FileObject.Write(i, offset, d)
-    if data == -1:
+    written, errorcode = self.FileObject.Write(i, inobj.inode.size, bytearray(string,"utf-8"))
+    if written == -1:
       print ("Error: " + errorcode)
       return -1
-    print(f"Successfully appended {len(s)} bytes.")
+    print ("Successfully appended " + str(written) + " bytes.")
     return 0
 
-  def rm(self, filename):
-    i, errorcode = self.FileObject.Unlink(self.cwd, filename)
+  def lnh(self, target, name):
+    '''Shell command that calls Link() with the shell's cwd'''
+    i, errorcode = self.FileObject.Link(target, name, self.cwd)
     if i == -1:
-      print ("Error: " + errorcode)
+      print ("Error: " + errorcode + "\n")
+      return -1
+    return 0
+
+  def lns(self, target, name):
+    '''Shell command that calls Symlink() with the shell's cwd'''
+    i, errorcode = self.FileObject.Symlink(target, name, self.cwd)
+    if i == -1:
+      print ("Error: " + errorcode + "\n")
       return -1
     return 0
 
@@ -260,31 +274,38 @@ class FSShell():
           print ("Error: save requires 1 argument")
         else:
           self.save(splitcmd[1])
-      elif splitcmd[0] == "exit":
-        return
-
-      # HW2
       elif splitcmd[0] == "mkdir":
         if len(splitcmd) != 2:
-          print ("Error: mkdir requires 1 argument")
+          print ("Error: mkdir requires one argument")
         else:
           self.mkdir(splitcmd[1])
       elif splitcmd[0] == "create":
         if len(splitcmd) != 2:
-          print ("Error: create requires 1 argument")
+          print ("Error: create requires one argument")
         else:
           self.create(splitcmd[1])
-      elif splitcmd[0] == "append":
-        if len(splitcmd) != 3:
-          print ("Error: create requires 2 arguments")
-        else:
-          self.append(splitcmd[1], splitcmd[2])
       elif splitcmd[0] == "rm":
         if len(splitcmd) != 2:
-          print ("Error: create requires 1 argument")
+          print ("Error: rm requires one argument")
         else:
           self.rm(splitcmd[1])
-          
+      elif splitcmd[0] == "append":
+        if len(splitcmd) != 3:
+          print ("Error: append requires two arguments")
+        else:
+          self.append(splitcmd[1],splitcmd[2])
+      elif splitcmd[0] == "lnh":
+        if len(splitcmd) != 3:
+          print ("Error: lnh requires two arguments")
+        else:
+          self.lnh(splitcmd[1],splitcmd[2])
+      elif splitcmd[0] == "lns":
+        if len(splitcmd) != 3:
+          print ("Error: lns requires two arguments")
+        else:
+          self.lns(splitcmd[1],splitcmd[2])
+      elif splitcmd[0] == "exit":
+        return
       else:
         print ("command " + splitcmd[0] + " not valid.\n")
 
