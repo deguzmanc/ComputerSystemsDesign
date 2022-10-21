@@ -1,4 +1,3 @@
-from ctypes.wintypes import tagRECT
 import pickle, logging 
 
 ##### File system constants
