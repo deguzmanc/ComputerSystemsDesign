@@ -193,7 +193,15 @@ class DiskBlocks():
       # commenting this out as the request now goes to the server
       # self.block[block_number] = putdata
       # call Put() method on the server; code currently quits on any server failure 
-      ret = self.block_server.Put(block_number,putdata)
+      while True:
+        try:
+          ret = self.block_server.Put(block_number,putdata)
+        except ConnectionRefusedError:
+          print('SERVER_DISCONNECTED')
+        except socket.timeout:
+          print('SERVER_TIMED_OUT')
+        else:
+          break
       if ret == -1:
         logging.error('Put: Server returns error')
         quit()
@@ -214,7 +222,15 @@ class DiskBlocks():
       # commenting this out as the request now goes to the server
       # return self.block[block_number]
       # call Get() method on the server
-      data = self.block_server.Get(block_number)
+      while True:
+        try:
+          data = self.block_server.Get(block_number)
+        except ConnectionRefusedError:
+          print('SERVER_DISCONNECTED')
+        except socket.timeout:
+          print('SERVER_TIMED_OUT')
+        else:
+          break
       # return as bytearray
       return bytearray(data)
 
@@ -227,7 +243,15 @@ class DiskBlocks():
 
     logging.debug ('RSM: ' + str(block_number))
     if block_number in range(0,TOTAL_NUM_BLOCKS):
-      data = self.block_server.RSM(block_number)
+      while True:
+        try:
+          data = self.block_server.RSM(block_number)
+        except ConnectionRefusedError:
+          print('SERVER_DISCONNECTED')
+        except socket.timeout:
+          print('SERVER_TIMED_OUT')
+        else:
+          break
 
       return bytearray(data)
 
