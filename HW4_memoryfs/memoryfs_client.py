@@ -1134,7 +1134,7 @@ class FileName():
             # copy from last
             block[current_position:current_position+FILE_NAME_DIRENTRY_SIZE] = last_block[last_block_end_position:last_block_end_position+FILE_NAME_DIRENTRY_SIZE]
             last_block[last_block_end_position:last_block_end_position+FILE_NAME_DIRENTRY_SIZE] = bytearray(FILE_NAME_DIRENTRY_SIZE)
-            self.RawBlocks.Put(last_block_index,last_block)
+            self.RawBlocks.Put(dir_inode.inode.block_numbers[last_block_index], last_block)
           # write the block back
           self.RawBlocks.Put(block_index,block)
           # update inode size
