@@ -1,0 +1,8 @@
+ls
+create f1
+append f1 0123456789
+ls
+cat f1
+cat f1
+cat f1
+exit
