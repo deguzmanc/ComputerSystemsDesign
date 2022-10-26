@@ -33,6 +33,8 @@ if __name__ == "__main__":
   ap.add_argument('-bs', '--block_size', type=int, help='an integer value')
   ap.add_argument('-port', '--port', type=int, help='an integer value')
   ap.add_argument('-delayat', '--delayat', type=int, nargs='?', help='an integer value to delay every nth request')
+  ap.add_argument('-initdbm', '--initdbm', type=int, nargs='?', help='an integer flag; 1 initializes the database with zero blocks, 0 does not initialize the database')
+  ap.add_argument('-dbmfile', '--dbmfile', type=str, nargs='?', help='a string that names the file used by dbm in disk')
 
   args = ap.parse_args()
 
@@ -54,16 +56,36 @@ if __name__ == "__main__":
     print('Must specify port number')
     quit()
 
+  DELAY_AT = -1
   if args.delayat:
     DELAY_AT = args.delayat
-    print(f'Delayat set to {DELAY_AT}')
-  else:
-    print('No delayat provided')
 
 
   # initialize blocks
   RawBlocks = DiskBlocks(TOTAL_NUM_BLOCKS, BLOCK_SIZE)
   request_count = 0
+
+  if args.dbmfile:
+    DBM_FILE = args.dbmfile
+    if args.initdbm:
+      INIT_DBM = args.initdbm
+      with dbm.open(DBM_FILE, 'c') as db:
+        # initialize from file
+        if INIT_DBM == 0: 
+          for i in range(0, TOTAL_NUM_BLOCKS):
+            RawBlocks.block[i] = bytearray(db[str(i)])
+        #write zeroes to file
+        elif INIT_DBM == 1:
+          for i in range (0, TOTAL_NUM_BLOCKS):
+            db[i] = bytes(RawBlocks.block[i])
+        else:
+          print('Must specify a valid initdbm if dbmfile is specified')
+    else:
+      print('Must specify initdbm if dbmfile is specified')
+      quit()
+  else:
+    print('No dbmfile specified. Data will not persist')
+
 
   # Create server
   server = SimpleXMLRPCServer(("127.0.0.1", PORT), requestHandler=RequestHandler) 
@@ -71,7 +93,7 @@ if __name__ == "__main__":
   def Get(block_number):
     global request_count
     request_count += 1
-    if request_count % DELAY_AT== 0:
+    if DELAY_AT != -1 and request_count % DELAY_AT == 0:
       time.sleep(10)
     result = RawBlocks.block[block_number]
     return result
@@ -81,7 +103,7 @@ if __name__ == "__main__":
   def Put(block_number, data):
     global request_count
     request_count += 1
-    if request_count % DELAY_AT== 0:
+    if DELAY_AT != -1 and request_count % DELAY_AT== 0:
       time.sleep(10)
     RawBlocks.block[block_number] = data.data
     return 0
