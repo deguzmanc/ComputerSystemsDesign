@@ -67,22 +67,19 @@ if __name__ == "__main__":
 
   if args.dbmfile:
     DBM_FILE = args.dbmfile
-    if args.initdbm:
-      INIT_DBM = args.initdbm
-      with dbm.open(DBM_FILE, 'c') as db:
-        # initialize from file
-        if INIT_DBM == 0: 
-          for i in range(0, TOTAL_NUM_BLOCKS):
-            RawBlocks.block[i] = bytearray(db[str(i)])
-        #write zeroes to file
-        elif INIT_DBM == 1:
-          for i in range (0, TOTAL_NUM_BLOCKS):
-            db[i] = bytes(RawBlocks.block[i])
-        else:
-          print('Must specify a valid initdbm if dbmfile is specified')
-    else:
-      print('Must specify initdbm if dbmfile is specified')
-      quit()
+    INIT_DBM = args.initdbm
+    with dbm.open(DBM_FILE, 'c') as db:
+      # initialize from file
+      if INIT_DBM == 0: 
+        for i in range(0, TOTAL_NUM_BLOCKS):
+          RawBlocks.block[i] = bytearray(db[str(i)])
+      #write zeroes to file
+      elif INIT_DBM == 1:
+        for i in range (0, TOTAL_NUM_BLOCKS):
+          db[str(i)] = bytes(RawBlocks.block[i])
+      else:
+        print('Must specify a valid initdbm if dbmfile is specified')
+        quit()
   else:
     print('No dbmfile specified. Data will not persist')
 
@@ -106,6 +103,11 @@ if __name__ == "__main__":
     if DELAY_AT != -1 and request_count % DELAY_AT== 0:
       time.sleep(10)
     RawBlocks.block[block_number] = data.data
+
+    # write to dbm as well
+    if args.dbmfile:
+      with dbm.open(DBM_FILE, 'c') as db:
+        db[str(block_number)] = bytes(data.data)
     return 0
 
   server.register_function(Put)
@@ -114,6 +116,12 @@ if __name__ == "__main__":
     result = RawBlocks.block[block_number]
     # RawBlocks.block[block_number] = RSM_LOCKED
     RawBlocks.block[block_number] = bytearray(RSM_LOCKED.ljust(BLOCK_SIZE,b'\x01'))
+
+    # write to dbm as well
+    if args.dbmfile:
+      with dbm.open(DBM_FILE, 'c') as db:
+        db[str(block_number)] = bytes(bytearray(RSM_LOCKED.ljust(BLOCK_SIZE,b'\x01')))
+
     return result
 
   server.register_function(RSM)
