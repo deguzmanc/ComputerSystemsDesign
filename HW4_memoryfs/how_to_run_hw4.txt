@@ -32,7 +32,7 @@ Suppose you want to run a larger file system and two clients (cid 0 and 1):
 python3 memoryfs_server.py -p 8000 -nb 2048 -bs 512
 
 python3 memoryfs_shell_rpc.py -nb 2048 -bs 512 -is 32 -ni 128 -cid 0 -port 8000
-python3 memoryfs_shell_rpc.py -nb 2048 -bs 512 -is 32 -ni 128 -cid 1 -port 8000
+python3 memoryfs_shell_rpc.py -nb 2048 -bs 512 -is 32 -ni 128 -cid 1 -port 8000 -rootinit 0
 
 
 4. Terminating client and server
