@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
   ap.add_argument('-nb', '--total_num_blocks', type=int, help='an integer value')
   ap.add_argument('-bs', '--block_size', type=int, help='an integer value')
+  ap.add_argument('-port', '--port', type=int, help='an integer value')
   ap.add_argument('-delayat', '--delayat', type=int, nargs='?', help='an integer value to delay every nth request')
 
   args = ap.parse_args()
@@ -62,12 +63,13 @@ if __name__ == "__main__":
 
   # initialize blocks
   RawBlocks = DiskBlocks(TOTAL_NUM_BLOCKS, BLOCK_SIZE)
+  request_count = 0
 
   # Create server
   server = SimpleXMLRPCServer(("127.0.0.1", PORT), requestHandler=RequestHandler) 
-  request_count = 0
 
   def Get(block_number):
+    global request_count
     request_count += 1
     if request_count % DELAY_AT== 0:
       time.sleep(10)
@@ -77,6 +79,7 @@ if __name__ == "__main__":
   server.register_function(Get)
 
   def Put(block_number, data):
+    global request_count
     request_count += 1
     if request_count % DELAY_AT== 0:
       time.sleep(10)

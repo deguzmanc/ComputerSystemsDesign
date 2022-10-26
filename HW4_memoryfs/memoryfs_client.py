@@ -198,8 +198,10 @@ class DiskBlocks():
           ret = self.block_server.Put(block_number,putdata)
         except ConnectionRefusedError:
           print('SERVER_DISCONNECTED')
+          time.sleep(RETRY_INTERVAL)
         except socket.timeout:
           print('SERVER_TIMED_OUT')
+          time.sleep(RETRY_INTERVAL)
         else:
           break
       if ret == -1:
@@ -227,8 +229,10 @@ class DiskBlocks():
           data = self.block_server.Get(block_number)
         except ConnectionRefusedError:
           print('SERVER_DISCONNECTED')
+          time.sleep(RETRY_INTERVAL)
         except socket.timeout:
           print('SERVER_TIMED_OUT')
+          time.sleep(RETRY_INTERVAL)
         else:
           break
       # return as bytearray
@@ -248,8 +252,10 @@ class DiskBlocks():
           data = self.block_server.RSM(block_number)
         except ConnectionRefusedError:
           print('SERVER_DISCONNECTED')
+          time.sleep(RETRY_INTERVAL)
         except socket.timeout:
           print('SERVER_TIMED_OUT')
+          time.sleep(RETRY_INTERVAL)
         else:
           break
 
