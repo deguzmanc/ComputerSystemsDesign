@@ -1053,7 +1053,7 @@ class FileName():
 
     read_block = bytearray(bytes_to_read)
 
-    if file_inode.inode.gencnt != self.RawBlocks.inode_cache[file_inode_number]:
+    if not file_inode_number in self.RawBlocks.inode_cache or file_inode.inode.gencnt != self.RawBlocks.inode_cache[file_inode_number]:
       for b_num in file_inode.inode.block_numbers:
         if b_num in self.RawBlocks.block_cache:
           self.RawBlocks.block_cache.pop(b_num)
@@ -1101,6 +1101,7 @@ class FileName():
 
       logging.debug ('Read: current_offset: ' + str(current_offset) + ' , bytes_read: ' + str(bytes_read))
 
+    self.RawBlocks.inode_cache[file_inode_number] = file_inode.inode.gencnt
     return read_block, "SUCCESS"
 
 

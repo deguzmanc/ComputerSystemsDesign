@@ -80,8 +80,6 @@ if __name__ == "__main__":
       else:
         print('Must specify a valid initdbm if dbmfile is specified')
         quit()
-  else:
-    print('No dbmfile specified. Data will not persist')
 
 
   # Create server
