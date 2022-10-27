@@ -1,49 +1,87 @@
-## Design/implementation ##
+## Design/implementation
 
-1) Implement artificial delay in memoryfs_server.py to model a server/network slow to respond
+1. Implement artificial delay in memoryfs_server.py to model a server/network slow to respond
 
-Modify memoryfs_server.py to support a new command-line argument -delayat COUNT, where COUNT is an integer. Then, in your server code, modify the Get() and Put() implementations such that for every Nth request (N is the COUNT), the server artificially delays by "sleeping" for 10 seconds.
+memoryfs_server.py
 
-2) Implement at-least-once semantics for memoryfs_client.py
+- Added CL arg. `-delayat` using argument parser.
+- Added `request_count` variable
+  - fixed scoping issue with `global`
+- Modified Get and Put
+  - increments request_count
+  - checks if Nth request (request_count % delayat)=> sleep for 10 seconds
 
-Implement at-least-once semantics for the Get(), Put() and RSM() calls in the client, such that your design is able to recover both from timeouts, and when the server is disconnected/reconnected. 
-*FOR FULL CREDIT* make sure your implementation prints out the following error messages (exactly these strings) when these events happen, respectively:
+2. Implement at-least-once semantics for memoryfs_client.py
 
-SERVER_TIMED_OUT
-SERVER_DISCONNECTED
+memoryfs_client.py
 
-3) Implement an in-disk key/value store for memoryfs_server.py
+- Created a loop to retry self.block_server.Get, Put, and RSM requests
+  - used try except else syntax
+  - Exception _socket.timeout_ => print SERVER_TIMED_OUT
+  - Exception _ConnectionRefusedError_ => print SERVER_DISCONNECTED
+  - if any exception occured, it would sleep for RETRY_INTERVAL
+  - if no exception occured the loop was broken
 
-In the implementations up to HW#3, the RawBlocks data is stored in main memory - hence, when the process terminates or is killed, the data is gone. In this assignment, you will implement a key/value store in disk that persists over restarts using Python's dbm module https://remusao.github.io/posts/python-dbm-module.html
+3. Implement an in-disk key/value store for memoryfs_server.py
 
-To this end, modify the server to support two additional command-line arguments: 
--initdbm : an integer flag; 1 initializes the database with zero blocks, 0 does not initialize the database 
--dbmfile : a string that names the file used by dbm in disk 
+memory_server.py
 
-If the -dbmfile argument is given, you should use the named file as storage. Then, if -initdbm is 1, initialize all blocks with zeroes; otherwise, don't initialize - simply use its contents.
+- Used argparser for CL args:
+  - `-initdbm`: an integer flag
+    - 1 => initializes zero blocks and writes to dbm
+    - 0 => reads from dbm and puts into RawBlocks
+  - `-dbmfile` : a string that names the file used by dbm in disk
+- updated Put and RSM to update dbm if dbmfile specified
 
-4) Implement a client-side cache for file data blocks read (Get()) in the Read() function in memoryfs_client.py
+4. Implement a client-side cache for file data blocks read (Get()) in the Read() function in memoryfs_client.py
 
-Extend your memoryfs_client.py to support client-side caching of file data blocks. You should only concern with data blocks in regular files - not directories, not inodes, no free bitmap blocks, etc.
+- Created a `block_cache` dictionary in Diskblocks
+  - maps block_number to bytearray
+- Created a `inode_cache` dictionary in Diskblocks
+  - maps inode_number to gencnt
+- Incremented gencnt in FileName Unlink and Write functions before StoreInode()
+- In FileName.Read()
 
-You will implement a simple caching invalidation policy as follows:
-  - initialize gencnt to 0, and increment it any time the file is written to, *and* also when it is unlinked
-  - when a file is Read(), check first what the gencnt in the inode is, and what the gencnt in the cache is. 
-    - If the gencnt match, you may Get() blocks from the cache if they are present in the cache 
-    - If the gencnt do not match, invalidate all cache entries for this file inode
+  - If the gencnt match
+    - If the block is present in cache
+      - Get blocks from the block_cache
+      - print CACHE_HIT
     - If the block is not present in the cache, Get() from the server and store in the cache
+  - If the gencnt do not match
+    - invalidate all cache entries for this file inode
+    - print CACHE_INVALIDATED
 
-*FOR FULL CREDIT* make sure your implementation prints out the following status messages to the screen (exactly these strings) when *each* block is found in the cache, and when the cache is invalidate, respectively:
+**concern** if there is a hard link, eg f1 => b0, b1 and f2 => b0 and f2 changes, and f2 is modified, shouldn't the cache be
 
-CACHE_HIT
-CACHE_INVALIDATED
+## Testing Methods
 
-## Assignment questions ##
+- At-least-once behavior when timeouts and server disconnections occur
 
-Q1) In the code given to you, the Acquire() and Release() calls are placed around operations such as cat and append to ensure they run exclusively in one client at a time. What is one example of a race condition that can happen without the lock? Simulate a race condition in the code (comment out the lock Acquire()/Release() in the cat and append functions, and place sleep statement(s) strategically) to verify, and describe how you did it.
+  - Timeouts:
+    - started server with delayat
+    - ensured client request recovered to shell after SERVER_TIMED_OUT
+  - Server disconnections and persisting data across server restarts:
+    - started server with dbm and client
+    - created files/directories
+    - stopped server
+    - made client request
+    - restarted server from dbm
+    - ensured client request recovered to shell after SERVER_DISCONNECTED
 
-Q2) What happens when you don't store the data in disk using dbm on the server, and terminate/restart the server? 
+## Assignment questions
 
-Q3) What are the changes that were made to the Get() and Put() methods in the client, compared to the HW#3 version of the code?
+**Q1)** In the code given to you, the Acquire() and Release() calls are placed around operations such as cat and append to ensure they run exclusively in one client at a time. What is one example of a race condition that can happen without the lock? Simulate a race condition in the code (comment out the lock Acquire()/Release() in the cat and append functions, and place sleep statement(s) strategically) to verify, and describe how you did it.
 
-Q4) At-least-once semantics may at some point give up and return (e.g. perhaps the server is down forever). How would you implement this in the code (you don't need to actually implement; just describe in words)
+After commenting out the Acquire and Release statement for the append, I placed a sleep statement before self.FileObject.Write on line 211 of memory_shell_rpc.py. This allowed me to simulate reading the inode with 2 clients concurrently. Since they then wrote to the same offset, the overwrote one another which is a race condition as that isn't how append's intended functionality.
+
+**Q2)** What happens when you don't store the data in disk using dbm on the server, and terminate/restart the server?
+
+Without using dbm to sture data in disk, terminating/restarting the server loses all the files because they were stored in memory and not persistent storage.
+
+**Q3)** What are the changes that were made to the Get() and Put() methods in the client, compared to the HW#3 version of the code?
+
+Compared with the HW3 versions of the code, the Get() and Put() methods were modified to make xmlrpc calls to a server instead of modifying a diskblocks object directly with procedure calls.
+
+**Q4)** At-least-once semantics may at some point give up and return (e.g. perhaps the server is down forever). How would you implement this in the code (you don't need to actually implement; just describe in words)
+
+At-least-once semantics may choose to give up to prevent fate sharing when a server is down forever using either a timeout or request limit. Each request (Get, Put, RSM) can be modified so that the loop for retries doesn't continue if a server hasn't responded after a set time period or exceeds a set request limit.
