@@ -109,6 +109,8 @@ class DiskBlocks():
 
     self.HandleFSConstants(args)
 
+    self.block_cache = {}
+    self.inode_cache = {}
 
 # Old
 #class DiskBlocks():
@@ -1018,6 +1020,7 @@ class FileName():
 
     # Update inode's metadata and write to storage
     file_inode.inode.size += bytes_written
+    file_inode.inode.gencnt += 1
     file_inode.StoreInode()
 
     return bytes_written, "SUCCESS"
@@ -1050,6 +1053,12 @@ class FileName():
 
     read_block = bytearray(bytes_to_read)
 
+    if file_inode.inode.gencnt != self.RawBlocks.inode_cache[file_inode_number]:
+      for b_num in file_inode.inode.block_numbers:
+        if b_num in self.RawBlocks.block_cache:
+          self.RawBlocks.block_cache.pop(b_num)
+      print("CACHE_INVALIDATED")
+
     # this loop iterates through one or more blocks, ending when all data is read
     while bytes_read < bytes_to_read:
 
@@ -1075,8 +1084,14 @@ class FileName():
       # retrieve index of block to be written from inode's list
       block_number = file_inode.inode.block_numbers[current_block_index]
 
-      # first, we read the whole block from raw storage
-      block = file_inode.RawBlocks.Get(block_number)
+      # if in cache read from cache
+      if block_number in self.RawBlocks.block_cache:
+        block = self.RawBlocks.block_cache[block_number]
+        print("CACHE_HIT")
+      # make request to server and store in cache
+      else:
+        block = file_inode.RawBlocks.Get(block_number)
+        self.RawBlocks.block_cache[block_number] = block
 
       # copy slice of data into the right position in the block
       read_block[bytes_read:bytes_read+(read_end-read_start)] = block[read_start:read_end]
@@ -1179,6 +1194,7 @@ class FileName():
 
     # decrement refcnt
     file.inode.refcnt -= 1
+    file_inode.inode.gencnt += 1
     file.StoreInode()
 
     # Free inode/data block resources if it's the last reference
