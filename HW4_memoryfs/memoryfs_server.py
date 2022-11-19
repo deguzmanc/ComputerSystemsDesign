@@ -69,23 +69,23 @@ if __name__ == "__main__":
   # Create server
   server = SimpleXMLRPCServer(("127.0.0.1", PORT), requestHandler=RequestHandler) 
 
-  def Get(block_number):
+  def SingleGet(block_number):
     result = RawBlocks.block[block_number]
     if CBLK != -1 and CBLK == block_number or RawBlocks.checksums[block_number] !=  hashlib.md5(result).digest():
       return -1
 
     return result
 
-  server.register_function(Get)
+  server.register_function(SingleGet)
 
-  def Put(block_number, data):
+  def SinglePut(block_number, data):
     RawBlocks.block[block_number] = data.data
     RawBlocks.checksums[block_number] = hashlib.md5(data.data).digest()
     return 0
 
-  server.register_function(Put)
+  server.register_function(SinglePut)
 
-  def RSM(block_number):
+  def SingleRSM(block_number):
     result = RawBlocks.block[block_number]
     if CBLK != -1 and CBLK == block_number or RawBlocks.checksums[block_number] !=  hashlib.md5(result).digest():
       return -1
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     RawBlocks.block[block_number] = bytearray(RSM_LOCKED.ljust(BLOCK_SIZE,b'\x01'))
     return result
 
-  server.register_function(RSM)
+  server.register_function(SingleRSM)
 
   # Run the server's main loop
   print ("Running block server with nb=" + str(TOTAL_NUM_BLOCKS) + ", bs=" + str(BLOCK_SIZE) + " on port " + str(PORT))
