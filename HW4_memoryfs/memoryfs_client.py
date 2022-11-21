@@ -98,17 +98,36 @@ class DiskBlocks():
       quit()
 
     # initialize XMLRPC client connection to raw block server
-    if args.port:
-      PORT = args.port
+    # if args.port:
+    #   PORT = args.port
+    # else:
+    #   print('Must specify port number')
+    #   quit()
+
+
+    # Implement the logic to handle N block_servers, instead of a single server, each with its own endpoint
+    if args.ns:
+      NS = args.ns
     else:
-      print('Must specify port number')
+      print('Must specify number of servers')
       quit()
-    server_url = 'http://' + SERVER_ADDRESS + ':' + str(PORT)
-    self.block_server = xmlrpc.client.ServerProxy(server_url, use_builtin_types=True)
+    
+    if args.startpoint:
+      STARTPOINT = args.startpoint
+    else:
+      print( 'Must specify valid startpoint')
+      quit()
+
+    self.block_server = []
+    for i in range(0, NS):
+      server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPOINT+i)
+      self.block_server.append(xmlrpc.client.ServerProxy(server_url, use_builtin_types=True))
+    
     socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
     self.HandleFSConstants(args)
-
+      
+    
 
 # Old
 #class DiskBlocks():

@@ -356,6 +356,13 @@ if __name__ == "__main__":
   # Other than FS args, consecutive args will be captured in by 'arg' as list
   ap.add_argument('arg', nargs='*')
 
+  # command-line argument "ns" specifying N (the number of servers)
+  ap.add_argument('-ns', '--number_of_servers', type=int, help='an integer value')
+  # Command-line argument startport specifying the port of the first server (i.e. server id 0); 
+  # the remaining servers must be listening to ports startport+1, startport+2, ... , startport+N-1
+  ap.add_argument('-startport', '--startport', type=int, help='an integer value')
+
+
   args = ap.parse_args()
 
   # Initialize empty file system data
