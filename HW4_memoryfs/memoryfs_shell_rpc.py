@@ -348,7 +348,7 @@ if __name__ == "__main__":
   ap.add_argument('-ni', '--max_num_inodes', type=int, help='an integer value')
   ap.add_argument('-is', '--inode_size', type=int, help='an integer value')
   # add port and client id
-  ap.add_argument('-port', '--port', type=int, help='an integer value')
+  # ap.add_argument('-port', '--port', type=int, help='an integer value')
   ap.add_argument('-cid', '--cid', type=int, help='an integer value')
   # set to zero to skip initializing root inode
   ap.add_argument('-rootinit', '--rootinit', default=1, type=int, help='an integer value')

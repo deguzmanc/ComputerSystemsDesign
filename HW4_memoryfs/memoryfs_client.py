@@ -104,7 +104,6 @@ class DiskBlocks():
     #   print('Must specify port number')
     #   quit()
 
-
     # Implement the logic to handle N block_servers, instead of a single server, each with its own endpoint
     if args.ns:
       NS = args.ns
@@ -112,15 +111,15 @@ class DiskBlocks():
       print('Must specify number of servers')
       quit()
     
-    if args.startpoint:
-      STARTPOINT = args.startpoint
+    if args.startport:
+      STARTPORT = args.startport
     else:
-      print( 'Must specify valid startpoint')
+      print( 'Must specify valid startport')
       quit()
 
     self.block_server = []
     for i in range(0, NS):
-      server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPOINT+i)
+      server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPORT+i)
       self.block_server.append(xmlrpc.client.ServerProxy(server_url, use_builtin_types=True))
     
     socket.setdefaulttimeout(SOCKET_TIMEOUT)
