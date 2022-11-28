@@ -106,6 +106,7 @@ class DiskBlocks():
 
     # Implement the logic to handle N block_servers, instead of a single server, each with its own endpoint
     if args.ns:
+      global NS
       NS = args.ns
     else:
       print('Must specify number of servers')
@@ -118,9 +119,10 @@ class DiskBlocks():
       quit()
 
     self.block_server = []
+    self.server_url = []
     for i in range(0, NS):
-      server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPORT+i)
-      self.block_server.append(xmlrpc.client.ServerProxy(server_url, use_builtin_types=True))
+      self.server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPORT+i)
+      self.block_server.append(xmlrpc.client.ServerProxy(self.server_url[i], use_builtin_types=True))
     
     socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
@@ -194,6 +196,28 @@ class DiskBlocks():
     # Number of filename+inode entries that can be stored in a single block
     FILE_ENTRIES_PER_DATA_BLOCK = BLOCK_SIZE // FILE_NAME_DIRENTRY_SIZE
 
+
+  ## RAID 5
+  def vbn_to_ps_sn_pbn(virutal_block_number):
+    """
+    input:
+    virtual_block_number
+    output:
+    parity_server(ps)
+    server_number(sn)
+    physical_block_number:
+    """
+    physical_block_number = virutal_block_number // (NS - 1)
+    server_number = virutal_block_number % (NS - 1)
+
+    parity_server = (NS - 1 - physical_block_number) % NS
+    if server_number >= parity_server:
+      server_number += 1
+
+    return parity_server, server_number, physical_block_number
+
+
+
   ## Put: interface to write a raw block of data to the block indexed by block number
 ## Blocks are padded with zeroes up to BLOCK_SIZE
 
@@ -207,17 +231,26 @@ class DiskBlocks():
     if block_number in range(0,TOTAL_NUM_BLOCKS): 
       # ljust does the padding with zeros
       putdata = bytearray(block_data.ljust(BLOCK_SIZE,b'\x00'))
+
+      parity_server, server_number, physical_block_number = self.vbn_to_ps_sn_pbn(block_number)
+
+
       # Write block
       # commenting this out as the request now goes to the server
       # self.block[block_number] = putdata
       # call Put() method on the server; code currently quits on any server failure 
-      ret = self.block_server.Put(block_number,putdata)
+      try:
+        ret = self.block_server[server_number].SinglePut(physical_block_number,putdata)
+      
+      except ConnectionRefusedError:
+        print("SERVER_DISCONNECTED PUT" + str(server_number))
+      
       if ret == -1:
         logging.error('Put: Server returns error')
         quit()
       return 0
     else:
-      logging.error('Put: Block out of range: ' + str(block_number))
+      logging.error('Put: Block out of range: ' + str(physical_block_number))
       quit()
 
 
@@ -228,14 +261,34 @@ class DiskBlocks():
 
     logging.debug ('Get: ' + str(block_number))
     if block_number in range(0,TOTAL_NUM_BLOCKS):
+
+      # RAID function
+      parity_server, server_number, physical_block_number = self.vbn_to_ps_sn_pbn(block_number)
+
+
       # logging.debug ('\n' + str((self.block[block_number]).hex()))
       # commenting this out as the request now goes to the server
       # return self.block[block_number]
       # call Get() method on the server
-      data = self.block_server.Get(block_number)
-      # return as bytearray
-      return bytearray(data)
+      try:
+        data = self.block_server[server_number].SingleGet(physical_block_number)
+        if data == -1:
+          print ("CORRUPTED_BLOCK" + str(physical_block_number)) 
+		      # retry Do later
+		      # (xor of all other servers SingleGet to all other servers)
+          corrected_data = bytearray(BLOCK_SIZE)
+          for i in range(NS):
+            if (server_number != i): 
+              data = self.block_server[i].SingleGet(physical_block_number)
+              for j in range(BLOCK_SIZE):
+                corrected_data[j] = corrected_data[j] ^ data[j]
+          return bytearray(corrected_data)
 
+        else:
+          # return as bytearray
+          return bytearray(data)
+      except ConnectionRefusedError:
+        print("SERVER_DISCONNECTED GET" + str(server_number))
     logging.error('Get: Block number larger than TOTAL_NUM_BLOCKS: ' + str(block_number))
     quit()
 
@@ -245,12 +298,47 @@ class DiskBlocks():
 
     logging.debug ('RSM: ' + str(block_number))
     if block_number in range(0,TOTAL_NUM_BLOCKS):
-      data = self.block_server.RSM(block_number)
 
-      return bytearray(data)
+      # RAID function
+      parity_server, server_number, physical_block_number = self.vbn_to_ps_sn_pbn(block_number)
 
-    logging.error('RSM: Block number larger than TOTAL_NUM_BLOCKS: ' + str(block_number))
+      try:
+        data = self.block_server[server_number].SingleRSM(physical_block_number)
+        if data == -1:
+          print ("CORRUPTED_BLOCK" + str(physical_block_number))
+        else:
+          return bytearray(data)
+      except ConnectionRefusedError:
+        print("SERVER_DISCONNECTED RSM" + str(server_number))
+      
+
+    logging.error('RSM: Block number larger than TOTAL_NUM_BLOCKS: ' + str(physical_block_number))
     quit()
+
+## Repair Procedure
+# Repair: you must also implement a simple process of repairing/recovery when a server that crashed is replaced by a 
+# new server with blank blocks. The repair procedure should work as follows: in the shell, when you type the command
+#  "repair server_ID", the client locks access to the disk, reconnects to server_ID, and regenerates all blocks for 
+#  server_ID using data from the other servers in the array.
+  def Repair(self, server_id):
+    # client locks access to the disk
+
+    # reconnects to server_ID
+    self.server_url[server_id] = xmlrpc.client.ServerProxy(self.server_url, use_builtin_types=True)
+    
+    # regenerates all blocks for servier_ID using data from the other servers in the array
+    repair_data = []
+    data = []
+    for block_number in range(TOTAL_NUM_BLOCKS):
+      for n in range(self.NS):
+        data[n] = self.block_server[n].SingleGet(block_number)
+        
+        for i in range(BLOCK_SIZE):
+          repair_data[i] = correct_data[i] ^ data[i]
+
+    
+    # put data
+    return repair_data
 
 ## Acquire and Release using a disk block lock
 

@@ -230,6 +230,11 @@ class FSShell():
       return -1
     return 0
 
+  # implements repair procedure
+  def repair(self, server_id):
+    self.FileObject.Rawblocks.Repair(server_id)
+    return 0
+
 
   def Interpreter(self):
     while (True):
@@ -241,20 +246,20 @@ class FSShell():
         if len(splitcmd) != 2:
           print ("Error: cd requires one argument")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.cd(splitcmd[1])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "cat":
         if len(splitcmd) != 2:
           print ("Error: cat requires one argument")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.cat(splitcmd[1])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "ls":
-        self.FileObject.RawBlocks.Acquire()
+        # self.FileObject.RawBlocks.Acquire()
         self.ls()
-        self.FileObject.RawBlocks.Release()
+        # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "showblock":
         if len(splitcmd) != 2:
           print ("Error: showblock requires one argument")
@@ -289,44 +294,49 @@ class FSShell():
         if len(splitcmd) != 2:
           print ("Error: mkdir requires one argument")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.mkdir(splitcmd[1])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "create":
         if len(splitcmd) != 2:
           print ("Error: create requires one argument")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.create(splitcmd[1])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "rm":
         if len(splitcmd) != 2:
           print ("Error: rm requires one argument")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.rm(splitcmd[1])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "append":
         if len(splitcmd) != 3:
           print ("Error: append requires two arguments")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.append(splitcmd[1],splitcmd[2])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "lnh":
         if len(splitcmd) != 3:
           print ("Error: lnh requires two arguments")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.lnh(splitcmd[1], splitcmd[2])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "lns":
         if len(splitcmd) != 3:
           print ("Error: lns requires two arguments")
         else:
-          self.FileObject.RawBlocks.Acquire()
+          # self.FileObject.RawBlocks.Acquire()
           self.lns(splitcmd[1], splitcmd[2])
-          self.FileObject.RawBlocks.Release()
+          # self.FileObject.RawBlocks.Release()
+      elif splitcmd[0] == "repair":
+        if len(splitcmd) != 2:
+          print ("Error: repair requires two arguments")
+        else:
+          self.lns(splitcmd[1], splitcmd[2])
       elif splitcmd[0] == "exit":
         return
       else:
