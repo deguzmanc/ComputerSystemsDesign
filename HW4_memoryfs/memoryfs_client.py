@@ -106,6 +106,7 @@ class DiskBlocks():
 
     # Implement the logic to handle N block_servers, instead of a single server, each with its own endpoint
     if args.ns:
+      global NS
       NS = args.ns
     else:
       print('Must specify number of servers')
@@ -383,6 +384,23 @@ class DiskBlocks():
     for i in range(min,max):
       logging.info ('Block [' + str(i) + '] : ' + str((self.Get(i)).hex()))
 
+  def vbn_to_ps_sn_pbn(virutal_block_number):
+    """
+    input:
+    virtual_block_number
+    output:
+    parity_server(ps)
+    server_number(sn)
+    physical_block_number:
+    """
+    physical_block_number = virutal_block_number // (NS - 1)
+    server_number = virutal_block_number % (NS - 1)
+
+    parity_server = (NS - 1 - physical_block_number) % NS
+    if server_number >= parity_server:
+      server_number += 1
+
+    return parity_server, server_number, physical_block_number
 
 
 #### INODE LAYER 
