@@ -99,4 +99,3 @@ if __name__ == "__main__":
   # Run the server's main loop
   print ("Running block server with nb=" + str(TOTAL_NUM_BLOCKS) + ", bs=" + str(BLOCK_SIZE) + " on port " + str(PORT))
   server.serve_forever()
-
