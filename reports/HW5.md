@@ -3,7 +3,7 @@
 1. Introduction and problem statement
    Describe in your own words what your project accomplishes, and motivate the decisions made
 
-In this project, we modifyied a filesystem that works with client server over xmlrpc to support more servers. Learning to scale horizontally with more servers instead of vertically with more powerful is important as it is a current industry trend with applications in cloud computing and distributed systems.
+In this project, we modifyied a filesystem that works with client server over xmlrpc to support more block servers. Through this, we learned about the benefits of redundancy, error correction, and repair. Learning to scale horizontally with more servers instead of vertically with more powerful is important as it is a current industry trend with applications in cloud computing and distributed systems.
 
 2. Design and implementation
    Include a detailed description of your design and how you decided to implement everything from the corruption of data, virtual-to-physical block translation, and handling failures. Use subsections for highlighting the major changes for each of the python programs.
@@ -21,9 +21,20 @@ In this project, we modifyied a filesystem that works with client server over xm
 3. Evaluation
    Describe how you tested your program and, for EEL-5737 students, how you evaluated the load distribution.
 
+   ![figure](../test_files/hw5/RAID5_4.png)
+
 4. Reproducibility
    Describe step by step instructions for how to use and run your file system and if possible, include how to run the tests you used to verify your code.
 
-5. Conclusions
+   1. Running the server (4 terminals)
 
-Hello
+      `python3 memoryfs_server.py -p 8000 -nb 512 -bs 256`
+      `python3 memoryfs_server.py -p 8001 -nb 512 -bs 256`
+      `python3 memoryfs_server.py -p 8002 -nb 512 -bs 256`
+      `python3 memoryfs_server.py -p 8003 -nb 512 -bs 256`
+
+   2. Running the client+shell (second terminal)
+
+      `python3 memoryfs_shell_rpc.py -nb 1536 -bs 256 -ns 4 -startport 8000 -cid 0 -is 32`
+
+5. Conclusions

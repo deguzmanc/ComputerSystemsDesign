@@ -9,7 +9,10 @@ First, run the block server. It will take three arguments:
 
 run it as follows:
 
-python3 memoryfs_server.py -p 8000 -nb 256 -bs 128
+python3 memoryfs_server.py -p 8000 -nb 512 -bs 256
+python3 memoryfs_server.py -p 8001 -nb 512 -bs 256
+python3 memoryfs_server.py -p 8002 -nb 512 -bs 256
+python3 memoryfs_server.py -p 8003 -nb 512 -bs 256
 
 
 2. Running the client+shell (second terminal)
@@ -20,7 +23,7 @@ It takes the file system configuration arguments from previous assignments (e.g.
 
 run it as follows:
 
-python3 memoryfs_shell_rpc.py -cid 0 -port 8000
+python3 memoryfs_shell_rpc.py -nb 1536 -bs 256 -ns 4 -startport 8000 -cid 0 -is 32
 
 The shell commands work as in previous assignments.
 
