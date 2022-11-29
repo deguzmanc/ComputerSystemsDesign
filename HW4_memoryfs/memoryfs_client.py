@@ -321,24 +321,15 @@ class DiskBlocks():
 #  "repair server_ID", the client locks access to the disk, reconnects to server_ID, and regenerates all blocks for 
 #  server_ID using data from the other servers in the array.
   def Repair(self, server_id):
-    # client locks access to the disk
-
-    # reconnects to server_ID
-    self.server_url[server_id] = xmlrpc.client.ServerProxy(self.server_url, use_builtin_types=True)
-    
-    # regenerates all blocks for servier_ID using data from the other servers in the array
-    repair_data = []
-    data = []
+    corrected_data = bytearray(BLOCK_SIZE)
     for block_number in range(TOTAL_NUM_BLOCKS):
-      for n in range(self.NS):
-        data[n] = self.block_server[n].SingleGet(block_number)
-        
-        for i in range(BLOCK_SIZE):
-          repair_data[i] = correct_data[i] ^ data[i]
-
-    
-    # put data
-    return repair_data
+      for i in range(NS):
+        if (server_id != i): 
+          data = self.block_server[i].SingleGet(block_number)
+          for j in range(BLOCK_SIZE):
+            corrected_data[j] = corrected_data[j] ^ data[j]
+      self.block_server[server_id].SinglePut(i, corrected_data)
+    return 0
 
 ## Acquire and Release using a disk block lock
 
