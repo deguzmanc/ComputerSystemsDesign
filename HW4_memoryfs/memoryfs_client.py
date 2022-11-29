@@ -121,7 +121,7 @@ class DiskBlocks():
     self.block_server = []
     self.server_url = []
     for i in range(0, NS):
-      self.server_url = 'http://' + SERVER_ADDRESS + ':' + str(STARTPORT+i)
+      self.server_url.append('http://' + SERVER_ADDRESS + ':' + str(STARTPORT+i))
       self.block_server.append(xmlrpc.client.ServerProxy(self.server_url[i], use_builtin_types=True))
     
     socket.setdefaulttimeout(SOCKET_TIMEOUT)
@@ -198,7 +198,7 @@ class DiskBlocks():
 
 
   ## RAID 5
-  def vbn_to_ps_sn_pbn(virutal_block_number):
+  def vbn_to_ps_sn_pbn(self, virutal_block_number):
     """
     input:
     virtual_block_number
@@ -233,21 +233,25 @@ class DiskBlocks():
       putdata = bytearray(block_data.ljust(BLOCK_SIZE,b'\x00'))
 
       parity_server, server_number, physical_block_number = self.vbn_to_ps_sn_pbn(block_number)
-
+      # print ('Put: block number ' + str(block_number) + str(physical_block_number) + ' server ' + str(server_number) + ' len ' + str(len(block_data)) + '\n' + str(block_data.hex()))
 
       # Write block
       # commenting this out as the request now goes to the server
       # self.block[block_number] = putdata
       # call Put() method on the server; code currently quits on any server failure 
       try:
+        current_data = self.block_server[server_number].SingleGet(physical_block_number)
+        parity_data = self.block_server[parity_server].SingleGet(physical_block_number)
         ret = self.block_server[server_number].SinglePut(physical_block_number,putdata)
+        
+        new_parity_data = bytearray(BLOCK_SIZE)
+        for j in range(BLOCK_SIZE):
+          new_parity_data[j] = putdata[j] ^ current_data[j] ^ parity_data[j]
+        ret = self.block_server[parity_server].SinglePut(physical_block_number,putdata)
       
       except ConnectionRefusedError:
-        print("SERVER_DISCONNECTED PUT" + str(server_number))
+        print("SERVER_DISCONNECTED PUT " + str(server_number))
       
-      if ret == -1:
-        logging.error('Put: Server returns error')
-        quit()
       return 0
     else:
       logging.error('Put: Block out of range: ' + str(physical_block_number))
@@ -265,7 +269,6 @@ class DiskBlocks():
       # RAID function
       parity_server, server_number, physical_block_number = self.vbn_to_ps_sn_pbn(block_number)
 
-
       # logging.debug ('\n' + str((self.block[block_number]).hex()))
       # commenting this out as the request now goes to the server
       # return self.block[block_number]
@@ -273,7 +276,7 @@ class DiskBlocks():
       try:
         data = self.block_server[server_number].SingleGet(physical_block_number)
         if data == -1:
-          print ("CORRUPTED_BLOCK" + str(physical_block_number)) 
+          print ("CORRUPTED_BLOCK " + str(physical_block_number)) 
 		      # retry Do later
 		      # (xor of all other servers SingleGet to all other servers)
           corrected_data = bytearray(BLOCK_SIZE)
@@ -288,7 +291,14 @@ class DiskBlocks():
           # return as bytearray
           return bytearray(data)
       except ConnectionRefusedError:
-        print("SERVER_DISCONNECTED GET" + str(server_number))
+        print("SERVER_DISCONNECTED GET " + str(server_number))
+        corrected_data = bytearray(BLOCK_SIZE)
+        for i in range(NS):
+          if (server_number != i): 
+            data = self.block_server[i].SingleGet(physical_block_number)
+            for j in range(BLOCK_SIZE):
+              corrected_data[j] = corrected_data[j] ^ data[j]
+        return bytearray(corrected_data)
     logging.error('Get: Block number larger than TOTAL_NUM_BLOCKS: ' + str(block_number))
     quit()
 
@@ -1020,6 +1030,7 @@ class FileName():
       return -1, "ERROR_WRITE_OFFSET_LARGER_THAN_SIZE"
 
     if offset + len(data) > MAX_FILE_SIZE:
+      print(MAX_FILE_SIZE)
       logging.debug ("ERROR_WRITE_EXCEEDS_FILE_SIZE " + str(offset + len(data)))
       return -1, "ERROR_WRITE_EXCEEDS_FILE_SIZE"
 
