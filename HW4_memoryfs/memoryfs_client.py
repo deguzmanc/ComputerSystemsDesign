@@ -247,7 +247,7 @@ class DiskBlocks():
         new_parity_data = bytearray(BLOCK_SIZE)
         for j in range(BLOCK_SIZE):
           new_parity_data[j] = putdata[j] ^ current_data[j] ^ parity_data[j]
-        ret = self.block_server[parity_server].SinglePut(physical_block_number,putdata)
+        ret = self.block_server[parity_server].SinglePut(physical_block_number,new_parity_data)
       
       except ConnectionRefusedError:
         print("SERVER_DISCONNECTED PUT " + str(server_number))
