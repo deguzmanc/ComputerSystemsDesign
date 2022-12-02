@@ -239,19 +239,58 @@ class DiskBlocks():
       # commenting this out as the request now goes to the server
       # self.block[block_number] = putdata
       # call Put() method on the server; code currently quits on any server failure 
+      """
+      get_data_failed, get_parity_failed
+      00 => update parity and data
+      01 => update just the data
+      10 => update the parity
+      """
+      get_data_failed = False
+      get_parity_failed = False
+
       try:
         current_data = self.block_server[server_number].SingleGet(physical_block_number)
+        if current_data == -1:
+          print ("CORRUPTED_BLOCK " + str(physical_block_number)) 
+          get_data_failed = True
+      except ConnectionRefusedError:
+        print("SERVER_DISCONNECTED PUT " + str(server_number))
+        get_data_failed = True
+
+      
+      try:
         parity_data = self.block_server[parity_server].SingleGet(physical_block_number)
+        if parity_data == -1:
+          print ("CORRUPTED_BLOCK " + str(physical_block_number)) 
+          get_parity_failed = True
+      except ConnectionRefusedError:      
+        print("SERVER_DISCONNECTED PUT " + str(parity_server))
+        get_parity_failed = True
+
+      # update data and parity
+      if not get_data_failed and not get_parity_failed:
         ret = self.block_server[server_number].SinglePut(physical_block_number,putdata)
-        
         new_parity_data = bytearray(BLOCK_SIZE)
         for j in range(BLOCK_SIZE):
           new_parity_data[j] = putdata[j] ^ current_data[j] ^ parity_data[j]
         ret = self.block_server[parity_server].SinglePut(physical_block_number,new_parity_data)
-      
-      except ConnectionRefusedError:
-        print("SERVER_DISCONNECTED PUT " + str(server_number))
-      
+        return ret
+
+      # update parity
+      if get_data_failed:
+        new_parity_data = putdata
+        for i in range(NS):
+          if i != server_number:
+              data = self.block_server[i].SingleGet(physical_block_number)
+              for j in range(BLOCK_SIZE):
+                new_parity_data[j] = new_parity_data[j] ^ data[j]
+        ret = self.block_server[parity_server].SinglePut(physical_block_number,new_parity_data)
+        return ret
+
+      # update data
+      if get_parity_failed:
+        ret = self.block_server[server_number].SinglePut(physical_block_number,putdata)
+
       return 0
     else:
       logging.error('Put: Block out of range: ' + str(physical_block_number))
@@ -273,25 +312,21 @@ class DiskBlocks():
       # commenting this out as the request now goes to the server
       # return self.block[block_number]
       # call Get() method on the server
+      get_data_failed = False
+
       try:
         data = self.block_server[server_number].SingleGet(physical_block_number)
         if data == -1:
           print ("CORRUPTED_BLOCK " + str(physical_block_number)) 
-		      # retry Do later
-		      # (xor of all other servers SingleGet to all other servers)
-          corrected_data = bytearray(BLOCK_SIZE)
-          for i in range(NS):
-            if (server_number != i): 
-              data = self.block_server[i].SingleGet(physical_block_number)
-              for j in range(BLOCK_SIZE):
-                corrected_data[j] = corrected_data[j] ^ data[j]
-          return bytearray(corrected_data)
+          get_data_failed = True
 
-        else:
-          # return as bytearray
-          return bytearray(data)
       except ConnectionRefusedError:
         print("SERVER_DISCONNECTED GET " + str(server_number))
+        get_data_failed = True
+
+      if get_data_failed:
+        # retry Do later
+        # (xor of all other servers SingleGet to all other servers)
         corrected_data = bytearray(BLOCK_SIZE)
         for i in range(NS):
           if (server_number != i): 
@@ -299,6 +334,10 @@ class DiskBlocks():
             for j in range(BLOCK_SIZE):
               corrected_data[j] = corrected_data[j] ^ data[j]
         return bytearray(corrected_data)
+      else:
+        # return as bytearray
+        return bytearray(data)
+        
     logging.error('Get: Block number larger than TOTAL_NUM_BLOCKS: ' + str(block_number))
     quit()
 
