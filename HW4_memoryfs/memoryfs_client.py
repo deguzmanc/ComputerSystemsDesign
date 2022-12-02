@@ -280,7 +280,7 @@ class DiskBlocks():
       if get_data_failed:
         new_parity_data = putdata
         for i in range(NS):
-          if i != server_number:
+          if i != server_number and i != parity_server:
               data = self.block_server[i].SingleGet(physical_block_number)
               for j in range(BLOCK_SIZE):
                 new_parity_data[j] = new_parity_data[j] ^ data[j]
@@ -360,8 +360,8 @@ class DiskBlocks():
 #  "repair server_ID", the client locks access to the disk, reconnects to server_ID, and regenerates all blocks for 
 #  server_ID using data from the other servers in the array.
   def Repair(self, server_id):
-    corrected_data = bytearray(BLOCK_SIZE)
     for block_number in range(TOTAL_NUM_BLOCKS//(NS-1)):
+      corrected_data = bytearray(BLOCK_SIZE)
       for i in range(NS):
         if (server_id != i): 
           data = self.block_server[i].SingleGet(block_number)
@@ -370,6 +370,10 @@ class DiskBlocks():
             
       self.block_server[int(server_id)].SinglePut(block_number, corrected_data)
     return 0
+
+  def RaidGet(self, server_id, block_num):
+    data = self.block_server[int(server_id)].SingleGet(int(block_num))
+    return bytearray(data)
 
 ## Acquire and Release using a disk block lock
 

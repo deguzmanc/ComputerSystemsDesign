@@ -235,6 +235,11 @@ class FSShell():
     self.FileObject.RawBlocks.Repair(server_id)
     return 0
 
+  def RaidGet(self, server_id, block_num):
+    data = self.FileObject.RawBlocks.RaidGet(server_id, block_num)
+    print (data.decode())
+    return 0
+
 
   def Interpreter(self):
     while (True):
@@ -334,9 +339,14 @@ class FSShell():
           # self.FileObject.RawBlocks.Release()
       elif splitcmd[0] == "repair":
         if len(splitcmd) != 2:
-          print ("Error: repair requires two arguments")
+          print ("Error: repair requires one arguments")
         else:
           self.repair(splitcmd[1])
+      elif splitcmd[0] == "RaidGet":
+        if len(splitcmd) != 3:
+          print ("Error: repair requires two arguments")
+        else:
+          self.RaidGet(splitcmd[1], splitcmd[2])
       elif splitcmd[0] == "exit":
         return
       else:
