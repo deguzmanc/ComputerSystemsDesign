@@ -214,7 +214,7 @@ class DiskBlocks():
     if server_number >= parity_server:
       server_number += 1
 
-    return parity_server, server_number, physical_block_number
+    return int(parity_server), int(server_number), int(physical_block_number)
 
 
 
@@ -322,13 +322,14 @@ class DiskBlocks():
 #  server_ID using data from the other servers in the array.
   def Repair(self, server_id):
     corrected_data = bytearray(BLOCK_SIZE)
-    for block_number in range(TOTAL_NUM_BLOCKS):
+    for block_number in range(TOTAL_NUM_BLOCKS//(NS-1)):
       for i in range(NS):
         if (server_id != i): 
           data = self.block_server[i].SingleGet(block_number)
           for j in range(BLOCK_SIZE):
             corrected_data[j] = corrected_data[j] ^ data[j]
-      self.block_server[server_id].SinglePut(i, corrected_data)
+            
+      self.block_server[int(server_id)].SinglePut(block_number, corrected_data)
     return 0
 
 ## Acquire and Release using a disk block lock
