@@ -232,7 +232,7 @@ class FSShell():
 
   # implements repair procedure
   def repair(self, server_id):
-    self.FileObject.Rawblocks.Repair(server_id)
+    self.FileObject.RawBlocks.Repair(server_id)
     return 0
 
 
@@ -336,7 +336,7 @@ class FSShell():
         if len(splitcmd) != 2:
           print ("Error: repair requires two arguments")
         else:
-          self.lns(splitcmd[1], splitcmd[2])
+          self.repair(splitcmd[1])
       elif splitcmd[0] == "exit":
         return
       else:
@@ -367,7 +367,7 @@ if __name__ == "__main__":
   ap.add_argument('arg', nargs='*')
 
   # command-line argument "ns" specifying N (the number of servers)
-  ap.add_argument('-ns', '--number_of_servers', type=int, help='an integer value')
+  ap.add_argument('-ns', '--ns', type=int, help='an integer value')
   # Command-line argument startport specifying the port of the first server (i.e. server id 0); 
   # the remaining servers must be listening to ports startport+1, startport+2, ... , startport+N-1
   ap.add_argument('-startport', '--startport', type=int, help='an integer value')
@@ -405,4 +405,3 @@ if __name__ == "__main__":
   # Run the interactive shell interpreter
   myshell = FSShell(FileObject)
   myshell.Interpreter()
-

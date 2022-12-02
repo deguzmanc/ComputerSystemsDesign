@@ -60,8 +60,7 @@ if __name__ == "__main__":
   CBLK = -1
   if args.cblk:
     CBLK = args.cblk
-  else:
-    print('No cblk specified')
+
 
   # initialize blocks
   RawBlocks = DiskBlocks(TOTAL_NUM_BLOCKS, BLOCK_SIZE)
